@@ -1,637 +1,946 @@
 #!/usr/bin/env python3
 """
-run_screening_benchmark.py
+run_dose_response_benchmark.py
 
-Replacement for:
-  - screening-experiments.ipynb  (Stage 1: simulation + CSV generation)
-  - screening-supplement.ipynb   (Stage 2: figure generation)
+Consolidated driver for the dose–response side of the COMPD vs PLAID benchmark.
 
-Produces exactly the same output files referenced by the LaTeX sources.
-Run from the evaluation_aaai26/ directory.
+Replaces:
+  - dose-response-experiments.ipynb  (data generation)
+  - dose-response-supplement.ipynb   (dose–response residual/IC50/d_max/R2 figures)
+  - parts of dose-response-curves.ipynb (example curve PNGs), once curves stage is completed.
 
-Usage:
-  python run_screening_benchmark.py                    # run all stages
-  python run_screening_benchmark.py --stage simulate   # CSVs only
-  python run_screening_benchmark.py --stage figures    # figures only (CSVs must exist)
-  python run_screening_benchmark.py --stage tables     # AUC table only (CSVs must exist)
-  python run_screening_benchmark.py --run-tag 20250623-ROC-supplement
+The script is structured in "stages", mirroring run_screening_benchmark.py:
+  - simulate : generate CSVs under generated-data/dose-response/
+  - figures  : generate dose–response figures under generated-plots/dose-response-supplement/
+               (and some paper panels under figures/)
+  - curves   : (optional) generate example per-compound curves in figures/
+  - all      : run simulate, then figures (and curves when enabled)
+
+It is designed to preserve existing filenames and paths so that LaTeX sources compile without changes.
 """
 
+from __future__ import annotations
+
 import argparse
-import csv
 import os
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List
 
 import numpy as np
 import pandas as pd
 
 import libraries.disturbances as dt
 import libraries.normalization as nrm
-import libraries.screening as sc
+import libraries.dose_response as dr
 import libraries.utilities as util
 
 
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+
 
 @dataclass
-class ScreeningConfig:
-    # Experiment grid
-    neg_pos_controls_list: List[Tuple[int, int]] = field(
-        default_factory=lambda: [(8, 8), (10, 10), (20, 10)]
+class DoseResponseScenario:
+    """
+    Encodes a single disturbance scenario from id_text_error_level_type_list
+    in dose-response-experiments.ipynb.
+
+    id_text and error_nl together determine the CSV filename suffixes.
+    error_types is the exact list of dicts passed into full_dose_response_evaluation.
+    label is the suffix used in figure names (see dose-response-supplement.ipynb).
+    """
+    id_text: str
+    error_nl: float
+    error_types: List[Dict[str, Any]]
+    label: str
+
+
+@dataclass
+class DoseResponseConfig:
+    """
+    Central configuration for the dose–response benchmark.
+
+    Paths and constants are chosen to match the current notebooks and LaTeX.
+    """
+
+    base_dir: Path = field(default_factory=lambda: Path("."))
+    data_dir: Path = field(
+        default_factory=lambda: Path("generated-data") / "dose-response"
     )
-    error_strength_list: List[float] = field(
-        default_factory=lambda: [0.06, 0.1, 0.2]
+    figures_dir: Path = field(
+        default_factory=lambda: Path("generated-plots") / "dose-response-supplement"
     )
-    hit_rate_list: List[float] = field(
-        default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
+    paper_figures_dir: Path = field(default_factory=lambda: Path("figures"))
+
+    concentrations_list: List[int] = field(default_factory=lambda: [6, 8, 12])
+    replicates_list: List[int] = field(default_factory=lambda: [1, 2, 3])
+
+    # Fixed tag to match the 20250706-* filenames currently hardcoded in
+    # dose-response-supplement.ipynb and the LaTeX sources.
+    date_tag: str = "20250706-"
+
+    # Scenarios cloned from id_text_error_level_type_list in dose-response-experiments.ipynb.
+    # Labels are chosen to match fig_name suffixes in the supplement.
+    scenarios: List[DoseResponseScenario] = field(
+        default_factory=lambda: [
+            DoseResponseScenario(
+                id_text="right-half-neg-control-log-new-reg",
+                error_nl=0.2,
+                error_types=[
+                    {
+                        "type": "right-half",
+                        "error_function": dt.add_errors_to_right_columns_half,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.2,
+                    }
+                ],
+                label="half-columns-neg-controls-0.2",
+            ),
+            DoseResponseScenario(
+                id_text="log-neg-control-new-reg",
+                error_nl=0.4,
+                error_types=[
+                    {
+                        "type": "right-half",
+                        "error_function": dt.add_errors_to_right_columns_half,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.4,
+                    }
+                ],
+                # This scenario is mostly used for robustness runs / grids; no direct figures.
+                label="half-columns-neg-controls-0.4-log",
+            ),
+            DoseResponseScenario(
+                id_text="right-half-neg-control-log-new-reg",
+                error_nl=0.4,
+                error_types=[
+                    {
+                        "type": "right-half",
+                        "error_function": dt.add_errors_to_right_columns_half,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.4,
+                    }
+                ],
+                label="half-columns-neg-controls-0.4",
+            ),
+            DoseResponseScenario(
+                id_text="curve_info-new-reg",
+                error_nl=0.055,
+                error_types=[
+                    {
+                        "type": "bowl-nl",
+                        "error_function": dt.add_bowlshaped_errors_nl,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.055,
+                    }
+                ],
+                label="bowl-0.055",
+            ),
+            DoseResponseScenario(
+                id_text="bowl-neg-control-new-reg",
+                error_nl=0.055,
+                error_types=[
+                    {
+                        "type": "bowl-nl",
+                        "error_function": dt.add_bowlshaped_errors_nl,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.055,
+                    }
+                ],
+                label="bowl-neg-controls-0.055",
+            ),
+            DoseResponseScenario(
+                id_text="curve_info-new-reg",
+                error_nl=0.085,
+                error_types=[
+                    {
+                        "type": "bowl-nl",
+                        "error_function": dt.add_bowlshaped_errors_nl,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.085,
+                    }
+                ],
+                label="bowl-0.085",
+            ),
+            DoseResponseScenario(
+                id_text="bowl-neg-control-new-reg",
+                error_nl=0.085,
+                error_types=[
+                    {
+                        "type": "bowl-nl",
+                        "error_function": dt.add_bowlshaped_errors_nl,
+                        "error_correction": nrm.normalize_plate_nearest_control,
+                        "error": 0.085,
+                    }
+                ],
+                label="bowl-neg-controls-0.085",
+            ),
+        ]
     )
 
-    # Plate biology
-    neg_control_mean: float = 100.0
-    neg_stdev: float = 10.0
-    pos_stdev: float = 10.0
-    # pos_control_mean is iterated over in a range(40, 41, 120) → only value 40
-    pos_control_mean: int = 40
-
-    # Batches per condition
-    n_batches: int = 10
-
-    # Row-loss sweep: range(1, 4) → lost_rows in {1, 2, 3}
-    lost_rows_range: Tuple[int, int] = (1, 4)
-
-    # Directories (relative to evaluation_aaai26/)
-    data_dir: Path = Path("generated-data/screening")
-    plots_dir: Path = Path("generated-plots/screening-supplement")
-    latex_tables_dir: Path = Path("latex-tables")
-
-    # Run tag (controls output filenames; must match what LaTeX expects)
-    run_tag: str = "20250623-ROC-supplement"
-
-    # Error types active in the current benchmark
-    # (others are commented out in the notebook)
-    @property
-    def error_types(self):
+    def plate_types_location(
+        self, compounds: int, concentrations: int, replicates: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Recreates plate_types_location from the dose-response-experiments notebook
+        for a given (compounds, concentrations, replicates) triple.
+        """
         return [
             {
-                "type": "bowl-nl",
-                "error_function": dt.add_bowlshaped_errors_nl,
+                "type": "COMPD",
+                "dir": "layouts/compounds_COMPD_layouts/",
+                "regex": f"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
                 "error_correction": nrm.normalize_plate_lowess_2d,
+            },
+            {
+                "type": "PLAID",
+                "dir": "layouts/compounds_PLAID_layouts/",
+                "regex": f"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+                "error_correction": nrm.normalize_plate_lowess_2d,
+            },
+            {
+                "type": "RANDOM",
+                "dir": "layouts/compounds_manual_layouts/",
+                "regex": "plate_layout_rand_(.+?).npy",
+                "error_correction": nrm.normalize_plate_lowess_2d,
+            },
+        ]
+
+
+# ----------------------------------------------------------------------
+# Stage 1: Simulations (CSV generation)
+# ----------------------------------------------------------------------
+
+
+def run_simulations(cfg: DoseResponseConfig) -> None:
+    """
+    Reproduces the driver loop in dose-response-experiments.ipynb, calling
+    full_dose_response_evaluation for all (concentrations, replicates, scenario)
+    combinations used by the supplement and main paper.
+
+    This writes absolute_ic50_data-*, relative_ic50_data-* and residuals-* CSVs
+    into cfg.data_dir, with filenames exactly matching the notebooks.
+    """
+    cfg.data_dir.mkdir(parents=True, exist_ok=True)
+    r = 0
+    r_max = len(cfg.concentrations_list) * len(cfg.replicates_list) * len(cfg.scenarios)
+
+    for concentrations in cfg.concentrations_list:
+        for replicates in cfg.replicates_list:
+            # This reproduces the original notebook calculation.
+            compounds = (14 * 22 - 20) // (concentrations * replicates)
+
+            if concentrations == 4:
+                dilution = 15
+            elif concentrations == 6:
+                dilution = 18
+            elif concentrations == 8:
+                dilution = 8
+            elif concentrations == 12:
+                dilution = 4
+            else:
+                raise ValueError(f"Unsupported concentrations: {concentrations}")
+
+            for scenario in cfg.scenarios:
+                today = cfg.date_tag  # e.g. "20250706-"
+
+                print(
+                    "Results are being stored in files which include the name:",
+                    f"{compounds}-{concentrations}-dil{dilution}-{replicates}-"
+                    f"{scenario.error_nl}-{today}{scenario.id_text}",
+                )
+
+                plate_types_location = cfg.plate_types_location(
+                    compounds, concentrations, replicates
+                )
+
+                dr.full_dose_response_evaluation(
+                    plate_types_location,
+                    scenario.error_types,
+                    compounds=compounds,
+                    concentrations=concentrations,
+                    replicates=replicates,
+                    dilution=dilution,
+                    error_nl=scenario.error_nl,
+                    today=today + scenario.id_text,
+                    data_dir=str(cfg.data_dir) + os.sep,
+                )
+                r += 1
+                print(r, "out of", r_max)
+
+
+# ----------------------------------------------------------------------
+# Helpers for figure generation
+# ----------------------------------------------------------------------
+
+
+def _compounds_for(doses: int, replicates: int) -> int:
+    """
+    Helper to reconstruct the compounds count for a given doses/replicate
+    configuration, mirroring the notebook.
+    """
+    return (14 * 22 - 20) // (doses * replicates)
+
+
+def _residuals_paths(
+    cfg: DoseResponseConfig, doses: int, dilution: int, error_nl: float, id_text: str
+) -> List[Path]:
+    """
+    Build the three residuals CSV filenames for 1,2,3 replicates, as used in
+    dose-response-supplement.ipynb for residual MSE panels.
+    """
+    comps = [
+        _compounds_for(doses, 1),
+        _compounds_for(doses, 2),
+        _compounds_for(doses, 3),
+    ]
+    reps = [1, 2, 3]
+    paths: List[Path] = []
+    for c, r in zip(comps, reps):
+        fname = (
+            f"residuals-{c}-{doses}-dil{dilution}-{r}-{error_nl}-"
+            f"{cfg.date_tag}{id_text}.csv"
+        )
+        paths.append(cfg.data_dir / fname)
+    return paths
+
+
+def _load_residuals_triple(
+    cfg: DoseResponseConfig, doses: int, dilution: int, error_nl: float, id_text: str
+) -> List[np.ndarray]:
+    paths = _residuals_paths(cfg, doses, dilution, error_nl, id_text)
+    return [np.loadtxt(p, delimiter=",", dtype="str") for p in paths]
+
+def _ic50_paths(
+    cfg: DoseResponseConfig,
+    metric: str,          # "absolute" or "relative"
+    doses: int,
+    dilution: int,
+    error_nl: float,
+    id_text: str,
+) -> List[Path]:
+    """
+    Build the three absolute/relative IC50 CSV filenames (1,2,3 reps), matching
+    dose-response-experiments.ipynb and the artifact map.
+
+    metric == "absolute" → absolute_ic50_data-...
+    metric == "relative" → relative_ic50_data-...
+    """
+    if metric == "absolute":
+        prefix = "absolute_ic50_data"
+    elif metric == "relative":
+        prefix = "relative_ic50_data"
+    else:
+        raise ValueError(f"Unsupported metric: {metric}")
+
+    comps = [
+        _compounds_for(doses, 1),
+        _compounds_for(doses, 2),
+        _compounds_for(doses, 3),
+    ]
+    reps = [1, 2, 3]
+
+    paths: List[Path] = []
+    for c, r in zip(comps, reps):
+        fname = (
+            f"{prefix}-{c}-{doses}-dil{dilution}-{r}-{error_nl}-"
+            f"{cfg.date_tag}{id_text}.csv"
+        )
+        paths.append(cfg.data_dir / fname)
+    return paths
+
+def _load_ic50_triple(
+    cfg: DoseResponseConfig,
+    metric: str,
+    doses: int,
+    dilution: int,
+    error_nl: float,
+    id_text: str,
+) -> List[np.ndarray]:
+    """
+    Load the 1-, 2-, 3-replicate CSVs for the given metric and scenario as
+    np.ndarray objects suitable for plot_barplot_replicate_data / plot_r2_percentage.
+    """
+    paths = _ic50_paths(cfg, metric, doses, dilution, error_nl, id_text)
+    return [np.loadtxt(p, delimiter=",", dtype="str") for p in paths]
+
+
+# ----------------------------------------------------------------------
+# Stage 2: Figures (residuals + IC50/d_max/R2)
+# ----------------------------------------------------------------------
+
+
+def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
+    """
+    Regenerates all residual MSE panels from the supplement (Group 3) plus the
+    special 8-dose paper panel.
+
+    Output filenames match the artifact map exactly, e.g.:
+      residuals-1-2-3-8doses-dil8-bowl-0.055.png
+      residuals-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper.png
+    """
+    cfg.figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # Bowl-shaped, no negatives in the fit (curve_info-new-reg)
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.055, 0.085):
+            residuals_1rep, residuals_2rep, residuals_3rep = _load_residuals_triple(
+                cfg,
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="curve_info-new-reg",
+            )
+            fig_name = f"-1-2-3-{doses}doses-dil{dilution}-bowl-{error_nl}"
+            util.plot_barplot_residuals_data(
+                residuals_1rep,
+                residuals_2rep,
+                residuals_3rep,
+                fig_name,
+                y_max=450,
+                leg_loc="upper center",
+                fig_dir=str(cfg.figures_dir) + os.sep,
+            )
+
+    # Bowl-shaped, with 4 negatives in the fit (bowl-neg-control-new-reg)
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.055, 0.085):
+            residuals_1rep, residuals_2rep, residuals_3rep = _load_residuals_triple(
+                cfg,
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="bowl-neg-control-new-reg",
+            )
+            fig_name = (
+                f"-1-2-3-{doses}doses-dil{dilution}-bowl-neg-controls-{error_nl}"
+            )
+            util.plot_barplot_residuals_data(
+                residuals_1rep,
+                residuals_2rep,
+                residuals_3rep,
+                fig_name,
+                y_max=450,
+                leg_loc="upper center",
+                fig_dir=str(cfg.figures_dir) + os.sep,
+            )
+
+    # Column-wise right-half effects with 4 negatives (0.2 / 0.4)
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.2, 0.4):
+            residuals_1rep, residuals_2rep, residuals_3rep = _load_residuals_triple(
+                cfg,
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="right-half-neg-control-log-new-reg",
+            )
+            fig_name = (
+                f"-1-2-3-{doses}doses-dil{dilution}-half-columns-neg-controls-{error_nl}"
+            )
+            util.plot_barplot_residuals_data(
+                residuals_1rep,
+                residuals_2rep,
+                residuals_3rep,
+                fig_name,
+                y_max=450,
+                leg_loc="upper center",
+                fig_dir=str(cfg.figures_dir) + os.sep,
+            )
+
+    # Special paper residual panel (8 doses, strong column disturbance with 4 negatives)
+    doses, dilution, error_nl = 8, 8, 0.4
+    residuals_1rep, residuals_2rep, residuals_3rep = _load_residuals_triple(
+        cfg,
+        doses=doses,
+        dilution=dilution,
+        error_nl=error_nl,
+        id_text="right-half-neg-control-log-new-reg",
+    )
+    fig_name = "-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper"
+    util.plot_barplot_residuals_data(
+        residuals_1rep,
+        residuals_2rep,
+        residuals_3rep,
+        fig_name,
+        y_max=450,
+        fig_dir=str(cfg.figures_dir) + os.sep,
+    )
+
+
+def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
+    """
+    Regenerates all Group 2 and Group 3 dose–response figures that depend on
+    IC50/EC50 errors, d_max differences, and fit-quality (R²) using the
+    CSVs written by run_simulations().
+
+    This covers:
+      - dose-response-d_diff-... (Groups 2 + paper row)
+      - dose-response-relic50-... (Group 3 + paper row)
+      - dose-response-absic50-... (Group 3 + paper row)
+      - percentage-low-r2-curves-1-2-3-... (Group 3)
+    """
+    cfg.figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- Bowl-shaped, no negatives in fit (curve_info-new-reg) ---
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.055, 0.085):
+            # Relative and absolute IC50 CSVs
+            rel_1, rel_2, rel_3 = _load_ic50_triple(
+                cfg,
+                metric="relative",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="curve_info-new-reg",
+            )
+            abs_1, abs_2, abs_3 = _load_ic50_triple(
+                cfg,
+                metric="absolute",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="curve_info-new-reg",
+            )
+
+            # d_max (diff_d uses d, fit_d inside the data)
+            fig_name = f"-1-2-3-{doses}doses-dil{dilution}-bowl-{error_nl}"
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="",  # triggers diff_d and fig_type="d_diff"
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Relative IC50/EC50
+            util.plot_barplot_replicate_data(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="relic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Absolute IC50/EC50
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="absic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Percentage of low-R² curves (R² < 0.8)
+            r2_fig_name = f"-{doses}doses-dil{dilution}-bowl-{error_nl}"
+            util.plot_r2_percentage(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=r2_fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                leg_loc="upper left",
+                leg_ncol=1,
+                leg_fontsize=8,
+            )
+
+    # --- Bowl-shaped, with 4 negatives in fit (bowl-neg-control-new-reg) ---
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.055, 0.085):
+            rel_1, rel_2, rel_3 = _load_ic50_triple(
+                cfg,
+                metric="relative",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="bowl-neg-control-new-reg",
+            )
+            abs_1, abs_2, abs_3 = _load_ic50_triple(
+                cfg,
+                metric="absolute",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="bowl-neg-control-new-reg",
+            )
+
+            fig_name = (
+                f"-1-2-3-{doses}doses-dil{dilution}-bowl-neg-controls-{error_nl}"
+            )
+
+            # d_max
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Relative IC50/EC50
+            util.plot_barplot_replicate_data(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="relic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Absolute IC50/EC50
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="absic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # R² failure rate
+            r2_fig_name = (
+                f"-{doses}doses-dil{dilution}-bowl-neg-controls-{error_nl}"
+            )
+            util.plot_r2_percentage(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=r2_fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                leg_loc="upper left",
+                leg_ncol=1,
+                leg_fontsize=8,
+            )
+
+    # --- Column-wise right-half effects with 4 negatives (0.2 / 0.4) ---
+    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for error_nl in (0.2, 0.4):
+            rel_1, rel_2, rel_3 = _load_ic50_triple(
+                cfg,
+                metric="relative",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="right-half-neg-control-log-new-reg",
+            )
+            abs_1, abs_2, abs_3 = _load_ic50_triple(
+                cfg,
+                metric="absolute",
+                doses=doses,
+                dilution=dilution,
+                error_nl=error_nl,
+                id_text="right-half-neg-control-log-new-reg",
+            )
+
+            fig_name = (
+                f"-1-2-3-{doses}doses-dil{dilution}-half-columns-neg-controls-{error_nl}"
+            )
+
+            # d_max
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Relative IC50/EC50
+            util.plot_barplot_replicate_data(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="relic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # Absolute IC50/EC50
+            util.plot_barplot_replicate_data(
+                abs_1,
+                abs_2,
+                abs_3,
+                fig_name=fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                fig_type="absic50",
+                leg_loc="upper center",
+                leg_ncol=3,
+                leg_fontsize=8,
+            )
+
+            # R² failure rate
+            r2_fig_name = (
+                f"-{doses}doses-dil{dilution}-half-columns-neg-controls-{error_nl}"
+            )
+            util.plot_r2_percentage(
+                rel_1,
+                rel_2,
+                rel_3,
+                fig_name=r2_fig_name,
+                fig_dir=str(cfg.figures_dir) + os.sep,
+                leg_loc="upper left",
+                leg_ncol=1,
+                leg_fontsize=8,
+            )
+
+    # --- Paper IC50/d_max panels (8 doses, 0.4, half-columns-neg-controls, _paper) ---
+    doses, dilution, error_nl = 8, 8, 0.4
+    rel_1, rel_2, rel_3 = _load_ic50_triple(
+        cfg,
+        metric="relative",
+        doses=doses,
+        dilution=dilution,
+        error_nl=error_nl,
+        id_text="right-half-neg-control-log-new-reg",
+    )
+    abs_1, abs_2, abs_3 = _load_ic50_triple(
+        cfg,
+        metric="absolute",
+        doses=doses,
+        dilution=dilution,
+        error_nl=error_nl,
+        id_text="right-half-neg-control-log-new-reg",
+    )
+    paper_fig_name = "-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper"
+
+    # d_max paper panel
+    util.plot_barplot_replicate_data(
+        abs_1,
+        abs_2,
+        abs_3,
+        fig_name=paper_fig_name,
+        fig_dir=str(cfg.figures_dir) + os.sep,
+        fig_type="",
+        leg_loc="upper center",
+        leg_ncol=3,
+        leg_fontsize=8,
+    )
+
+    # Relative IC50/EC50 paper panel
+    util.plot_barplot_replicate_data(
+        rel_1,
+        rel_2,
+        rel_3,
+        fig_name=paper_fig_name,
+        fig_dir=str(cfg.figures_dir) + os.sep,
+        fig_type="relic50",
+        leg_loc="upper center",
+        leg_ncol=3,
+        leg_fontsize=8,
+    )
+
+    # Absolute IC50/EC50 paper panel
+    util.plot_barplot_replicate_data(
+        abs_1,
+        abs_2,
+        abs_3,
+        fig_name=paper_fig_name,
+        fig_dir=str(cfg.figures_dir) + os.sep,
+        fig_type="absic50",
+        leg_loc="upper center",
+        leg_ncol=3,
+        leg_fontsize=8,
+    )
+
+
+def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:
+    """
+    Orchestrates all dose–response figure generation.
+
+    After this runs, all Group 1–3 dose–response PNGs listed in the artifact
+    map are regenerated from the CSVs produced by run_simulations().
+    """
+    generate_residuals_figures(cfg)
+    generate_ic50_dmax_r2_figures(cfg)
+
+
+# ----------------------------------------------------------------------
+# Stage 3: Curves (example per-compound PNGs)
+# ----------------------------------------------------------------------
+
+
+def generate_example_curves(cfg: DoseResponseConfig) -> None:
+    """
+    Repackages the core of dose-response-curves.ipynb to regenerate example
+    per-compound curve PNGs like:
+
+      figures/plate_layout_rand_02.npy_compound_1-right-half.png
+      figures/plate_layout_20-12-8-3_01.npy_compound_1-right-half.png
+      figures/plate_layout_40-12-8-3_01.npy_compound_1-right-half.png
+      ...
+
+    This function is intentionally conservative: it only reproduces the layouts
+    and scenarios actually used in the paper/supplement artifact map. You can
+    extend it if you later want all debug PNGs.
+    """
+    cfg.paper_figures_dir.mkdir(parents=True, exist_ok=True)
+
+    # Example: use a single representative e-range around 50, as in the curves notebook.
+    concentrations = 8
+    replicates = 3
+    dilution = 8
+
+    # Number of compounds chosen to match the 12x8 grids in the example layouts
+    compounds = 40
+
+    # Slopes from the curves notebook
+    slopes = [0.5, 1, 1.5, 2]
+
+    # Disturbance: right-half with 4 negatives, strength 0.4 (paper scenario)
+    error_nl = 0.4
+    error_types = [
+        {
+            "type": "right-half",
+            "error_function": dt.add_errors_to_right_columns_half,
+            "error_correction": nrm.normalize_plate_nearest_control,
+            "error": error_nl,
+        }
+    ]
+
+    # Build df_params / plate_content similarly to dose-response-curves.ipynb
+    params = []
+    current_e = 50
+    for i in range(compounds):
+        params.append(
+            {
+                "compound": i,
+                "b": slopes[i % 3],
+                "c": 0,
+                "d": 100,
+                "e": current_e + 5 * np.random.random(),
+                "startDose": 10000,
+                "nDose": concentrations,
+                "dilution": dilution,
             }
-        ]
-
-    @property
-    def today_tag(self) -> str:
-        return f"-{self.run_tag}"
-
-    def layout_types(self, neg_controls: int, pos_controls: int) -> list:
-        nc, pc = neg_controls, pos_controls
-        return [
-            {
-                "type": "random",
-                "dir": "layouts/screening_RANDM_layouts/",
-                "regex": f"plate_layout_rand_{nc}-{pc}_" + r"(0*)(.+?)\.npy",
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
-            {
-                "type": "plaid",
-                "dir": "layouts/screening_PLAID_layouts/",
-                "regex": f"plate_layout_{nc}-{pc}_" + r"(0*)(.+?)\.npy",
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
-            {
-                "type": "compd",
-                "dir": "layouts/screening_COMPD_layouts/",
-                "regex": f"plate_layout_{nc}-{pc}_" + r"(0*)(.+?)\.npy",
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
-        ]
-
-    def scores_filename(self, pos_controls, neg_controls, error, pna) -> Path:
-        name = (
-            f"screening_scores_data-{pos_controls}-{neg_controls}"
-            f"-{error}-pna-{pna}{self.today_tag}.csv"
         )
-        return self.data_dir / name
 
-    def residuals_filename(self, pos_controls, neg_controls, error, pna) -> Path:
-        name = (
-            f"screening-residuals-{pos_controls}-{neg_controls}"
-            f"-{error}-pna-{pna}{self.today_tag}.csv"
-        )
-        return self.data_dir / name
+    df_params = pd.DataFrame.from_dict(params)
+    df_params.set_index("compound", inplace=True)
+    df_params["abs IC50"] = dr.IC50(
+        df_params["b"], df_params["c"], df_params["d"], df_params["e"]
+    )
 
+    plate_content = dr.generate_plate_content(
+        dose_response_params=params, replicates=replicates
+    )
 
-# ---------------------------------------------------------------------------
-# Stage 1 — Simulation
-# ---------------------------------------------------------------------------
-
-SCORES_HEADER = [
-    "batch", "layout", "error_type", "error", "lost_rows",
-    "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
-    "Zfactor_expected", "SSMD_expected",
-    "Zfactor_raw", "SSMD_raw",
-    "Zfactor_norm", "SSMD_norm",
-]
-
-RESIDUALS_HEADER = [
-    "batch", "layout", "error_type", "error", "lost_rows",
-    "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
-    "comp_id", "true_residuals", "expected_result", "obtained_result",
-    "activity", "plate_id",
-]
-
-
-def simulate_condition(
-    config: ScreeningConfig,
-    neg_controls: int,
-    pos_controls: int,
-    error: float,
-    percent_non_active: float,
-) -> None:
-    """
-    Simulate one (neg, pos, error, pna) condition across all layout types,
-    batches, and row-loss values.  Writes two CSVs to config.data_dir.
-    """
-    scores_path = config.scores_filename(pos_controls, neg_controls, error, percent_non_active)
-    residuals_path = config.residuals_filename(pos_controls, neg_controls, error, percent_non_active)
-
-    print(f"  Writing: {scores_path.name}")
-    print(f"  Writing: {residuals_path.name}")
-
-    plate_types = config.layout_types(neg_controls, pos_controls)
-
-    stop_all = False
-
-    with open(scores_path, "w", newline="") as sf, \
-         open(residuals_path, "w", newline="") as rf:
-
-        scores_writer = csv.writer(sf)
-        residuals_writer = csv.writer(rf)
-        scores_writer.writerow(SCORES_HEADER)
-        residuals_writer.writerow(RESIDUALS_HEADER)
-
-        for batch in range(config.n_batches):
-            if stop_all:
-                break
-            print(f"    batch {batch}")
-
-            # The notebook loops range(40, 41, 120) → only pos_control_mean=40
-            for pos_control_mean in range(40, 41, 120):
-                if stop_all:
-                    break
-
-                for plate_type in plate_types:
-                    if stop_all:
-                        break
-
-                    layout_dir = plate_type["dir"]
-                    layouts = sorted(os.listdir(layout_dir))
-
-                    for layout_file in layouts:
-                        if stop_all:
-                            break
-
-                        match = re.search(plate_type["regex"], layout_file)
-                        if match is None:
-                            continue
-
-                        layout = np.load(layout_dir + layout_file)
-                        neg_control_id = int(np.max(layout))
-                        pos_control_id = neg_control_id - 1
-
-                        for et in config.error_types:
-                            for lost_rows in range(*config.lost_rows_range):
-                                limits = [{"from": 1, "to": lost_rows}]
-
-                                for limit in limits:
-                                    # --- ideal plate ---
-                                    ideal_plate, activity_layout = sc.fill_plate(
-                                        layout,
-                                        neg_control_id,
-                                        pos_control_id,
-                                        config.neg_control_mean,
-                                        pos_control_mean,
-                                        neg_stdev=config.neg_stdev,
-                                        pos_stdev=config.pos_stdev,
-                                        percent_non_active=percent_non_active,
-                                    )
-
-                                    exp_nc_mean, exp_pc_mean, exp_nc_std, exp_pc_std = (
-                                        sc.control_stats(
-                                            ideal_plate, layout,
-                                            neg_control_id, pos_control_id
-                                        )
-                                    )
-                                    ssmd_expected = sc.ssmd(
-                                        exp_nc_mean, exp_pc_mean, exp_nc_std, exp_pc_std
-                                    )
-                                    zfactor_expected = sc.zfactor(
-                                        exp_nc_mean, exp_pc_mean, exp_nc_std, exp_pc_std
-                                    )
-
-                                    # --- apply disturbance + row loss ---
-                                    plate = et["error_function"](ideal_plate, error)
-                                    plate = dt.lose_rows(plate, limit["from"], limit["to"])
-
-                                    # --- raw stats ---
-                                    raw_nc_mean, raw_pc_mean, raw_nc_std, raw_pc_std = (
-                                        sc.control_stats(
-                                            plate, layout,
-                                            neg_control_id, pos_control_id
-                                        )
-                                    )
-                                    ssmd_raw = sc.ssmd(
-                                        raw_nc_mean, raw_pc_mean, raw_nc_std, raw_pc_std
-                                    )
-                                    zfactor_raw = sc.zfactor(
-                                        raw_nc_mean, raw_pc_mean, raw_nc_std, raw_pc_std
-                                    )
-
-                                    # --- normalization ---
-                                    remaining_layout = dt.lose_rows(
-                                        layout, limit["from"], limit["to"]
-                                    )
-                                    try:
-                                        plate = plate_type["error_correction"](
-                                            plate,
-                                            remaining_layout,
-                                            neg_control_id=neg_control_id,
-                                        )
-                                    except Exception as exc:
-                                        print(
-                                            f"      ERROR normalizing {layout_file}: {exc}"
-                                        )
-                                        stop_all = True
-                                        break
-
-                                    # --- normalized stats ---
-                                    norm_nc_mean, norm_pc_mean, norm_nc_std, norm_pc_std = (
-                                        sc.control_stats(
-                                            plate, remaining_layout,
-                                            neg_control_id, pos_control_id
-                                        )
-                                    )
-                                    ssmd_norm = sc.ssmd(
-                                        norm_nc_mean, norm_pc_mean, norm_nc_std, norm_pc_std
-                                    )
-                                    zfactor_norm = sc.zfactor(
-                                        norm_nc_mean, norm_pc_mean, norm_nc_std, norm_pc_std
-                                    )
-
-                                    # --- write scores row ---
-                                    scores_writer.writerow([
-                                        batch, plate_type["type"], et["type"], error,
-                                        lost_rows - 1,
-                                        exp_nc_mean, pos_control_mean,
-                                        exp_nc_std, exp_pc_std,
-                                        zfactor_expected, ssmd_expected,
-                                        zfactor_raw, ssmd_raw,
-                                        zfactor_norm, ssmd_norm,
-                                    ])
-
-                                    # --- write residuals rows ---
-                                    ideal_lost = dt.lose_rows(
-                                        ideal_plate, limit["from"], limit["to"]
-                                    )
-                                    res_array = np.power(
-                                        np.abs(ideal_lost - plate), 2
-                                    ).reshape(-1, 1)
-                                    comp_id_array = remaining_layout.reshape(-1, 1)
-                                    ideal_array = ideal_plate.reshape(-1, 1)
-                                    norm_array = plate.reshape(-1, 1)
-                                    activity_array = activity_layout.reshape(-1, 1)
-
-                                    combined = np.hstack([
-                                        comp_id_array, res_array,
-                                        ideal_array, norm_array, activity_array
-                                    ])
-                                    df = pd.DataFrame(
-                                        combined,
-                                        columns=[
-                                            "comp_type", "res",
-                                            "expected_result", "obtained_result",
-                                            "activity",
-                                        ],
-                                    )
-                                    df = df[df.comp_type > 0]
-                                    arr = df.to_numpy().T
-                                    (_, res_size) = arr.shape
-
-                                    plate_residuals = np.vstack([
-                                        np.full(res_size, batch),
-                                        np.full(res_size, plate_type["type"]),
-                                        np.full(res_size, et["type"]),
-                                        np.full(res_size, error),
-                                        np.full(res_size, lost_rows - 1),
-                                        np.full(res_size, exp_nc_mean),
-                                        np.full(res_size, pos_control_mean),
-                                        np.full(res_size, exp_nc_std),
-                                        np.full(res_size, exp_pc_std),
-                                        arr[0],   # comp_id
-                                        arr[1],   # true_residuals
-                                        arr[2],   # expected_result
-                                        arr[3],   # obtained_result
-                                        arr[4],   # activity
-                                        np.full(res_size, layout_file),
-                                    ])
-                                    residuals_writer.writerows(plate_residuals.T)
-
-
-def run_simulations(config: ScreeningConfig) -> None:
-    config.data_dir.mkdir(parents=True, exist_ok=True)
-    for (neg_controls, pos_controls) in config.neg_pos_controls_list:
-        print(f"\n(neg_controls={neg_controls}, pos_controls={pos_controls})")
-        for error in config.error_strength_list:
-            print(f"  error={error}")
-            for hit_rate in config.hit_rate_list:
-                pna = round(1.0 - hit_rate, 10)
-                print(f"    hit_rate={hit_rate:.0%}  pna={pna}")
-                simulate_condition(config, neg_controls, pos_controls, error, pna)
-
-
-# ---------------------------------------------------------------------------
-# Stage 2a — Control-layout figures
-# (screening-supplement.ipynb cells 4–6)
-# ---------------------------------------------------------------------------
-
-def generate_control_figures(config: ScreeningConfig) -> None:
-    """
-    Generates the three control-layout plate images referenced by
-    tikz-figures/a_figure_controls.tex:
-      figures/plate_random-controls-rows-error.png
-      figures/plate_plaid-controls-rows-error.png
-      figures/plate_compd-controls-rows-error.png
-    """
-    import matplotlib
-    matplotlib.use("Agg")
-
-    figures_dir = Path("figures")
-    figures_dir.mkdir(exist_ok=True)
-
-    layout_specs = [
-        (
-            "layouts/screening_RANDM_layouts/",
-            "plate_layout_rand_10-10_02.npy",
-            figures_dir / "plate_random-controls-rows-error.png",
-        ),
-        (
-            "layouts/screening_PLAID_layouts/",
-            "plate_layout_10-10_01.npy",
-            figures_dir / "plate_plaid-controls-rows-error.png",
-        ),
-        (
-            "layouts/screening_COMPD_layouts/",
-            "plate_layout_10-10_01.npy",
-            figures_dir / "plate_compd-controls-rows-error.png",
-        ),
+    # Layout sets taken from dose-response-curves.ipynb
+    plate_types_location = [
+        {
+            "type": "COMPD",
+            "dir": "layouts/compounds_COMPD_layouts/",
+            "layouts": [
+                "plate_layout_40-12-8-3_01.npy",
+            ],
+        },
+        {
+            "type": "PLAID",
+            "dir": "layouts/compounds_PLAID_layouts/",
+            "layouts": [
+                "plate_layout_20-12-8-3_01.npy",
+            ],
+        },
+        {
+            "type": "Random",
+            "dir": "layouts/compounds_manual_layouts/",
+            "layouts": [
+                "plate_layout_rand_02.npy",
+            ],
+        },
     ]
 
-    neg_control_mean = 90
-    pos_control_mean = 60
-    neg_stdev = 2
-    pos_stdev = 7
+    expected_noise = 0.01
+    my_min_dist = 0  # as in the curves notebook
 
-    for layout_dir, layout_file, out_path in layout_specs:
-        layout = np.load(layout_dir + layout_file)
-        neg_control_id = int(np.max(layout))
-        pos_control_id = neg_control_id - 1
+    # Ensure we write PNGs into the 'figures/' directory
+    cwd = os.getcwd()
+    os.chdir(cfg.paper_figures_dir)
 
-        ideal_plate, _ = sc.fill_plate(
-            layout, neg_control_id, pos_control_id,
-            neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
-        )
-        # Apply the same row-error disturbance used in the notebook (upper rows, linear)
-        disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
-
-        control_locations = util.get_controls_layout(layout)
-        util.plot_plate(
-            disturbed_plate,
-            title="",
-            mask=np.array(1 - control_locations, dtype=bool),
-            filename=str(out_path),
-        )
-        print(f"  Written: {out_path}")
-
-
-# ---------------------------------------------------------------------------
-# Stage 2b — Expected-vs-obtained screening panels
-# (screening-supplement.ipynb cells 8–11)
-# ---------------------------------------------------------------------------
-
-def generate_screening_panels(config: ScreeningConfig) -> None:
-    """
-    Generates the expected-vs-obtained plate panels for several bowl strengths.
-    Output: generated-plots/screening-supplement/screening-bowl-<fig_name>-{random,plaid,compd}.png
-    """
-    fig_dir = str(config.plots_dir) + "/"
-    data_dir = str(config.data_dir) + "/"
-    tag = config.today_tag
-
-    panels = [
-        # (fig_name, residuals_file_error, residuals_file_pna, max_value)
-        # Cell 8 — Manuscript Figure 3 a,b,c
-        ("0.06-10-10-0.99-stdev-3-4",
-         data_dir + f"screening-residuals-10-10-0.1-pna-0.99{tag}.csv",
-         450),
-        # Cell 9 — Supplement Figure
-        ("0.08-10-10-0.99-stdev-3-4",
-         data_dir + f"screening-residuals-10-10-0.2-pna-0.99{tag}.csv",
-         450),
-        # Cell 10 — Supplement (not included)
-        ("0.03-10-10-0.99-stdev-3-4",
-         data_dir + f"screening-residuals-10-10-0.06-pna-0.99{tag}.csv",
-         450),
-        # Cell 11 — Supplement (not included)
-        ("0.05-10-10-0.99-stdev-3-4",
-         data_dir + f"screening-residuals-10-10-0.05-pna-0.99{tag}.csv",
-         250),
-    ]
-
-    for fig_name, residuals_filename, max_value in panels:
-        print(f"  Panel: {fig_name}")
-        util.plot_screening_plates(
-            residuals_filename,
-            fig_name=fig_name,
-            fig_dir=fig_dir,
-            max_value=max_value,
-        )
+    try:
+        for plate_type in plate_types_location:
+            layout_dir = plate_type["dir"]
+            for layout_file in plate_type["layouts"]:
+                for et in error_types:
+                    # We only need one lost_rows / limit here to trigger plotting.
+                    limits = [{"from": 15, "to": 16}]  # bottom row, as in notebooks
+                    for limit in limits:
+                        dr.plate_curves_after_error(
+                            layout_dir,
+                            layout_file,
+                            plate_content,
+                            expected_noise,
+                            et["error_function"],
+                            et["error"],
+                            plate_type.get("error_correction", nrm.normalize_plate_lowess_2d),
+                            my_min_dist,
+                            lose_from_row=limit["from"],
+                            lose_to_row=limit["to"],
+                            df_params=df_params,
+                            plate_type=plate_type,
+                            compounds=compounds,
+                            concentrations=concentrations,
+                            replicates=replicates,
+                        )
+    finally:
+        os.chdir(cwd)
 
 
-# ---------------------------------------------------------------------------
-# Stage 2c — ROC and PR curves
-# (screening-supplement.ipynb cells 12–23)
-# ---------------------------------------------------------------------------
-
-def generate_roc_pr_curves(config: ScreeningConfig) -> None:
-    """
-    Generates ROC and PR curve figures for all hit rates and control configurations.
-    Prints AUC table code (roc_table_code / pr_table_code) to stdout for
-    the main-paper ROC/PR table.
-    """
-    fig_dir = str(config.plots_dir) + "/"
-    data_dir = str(config.data_dir) + "/"
-    tag = config.today_tag
-
-    # Each entry: (residuals_file, fig_name_stem, batch_roc, batch_pr, print_table)
-    # batch=None → let util use its default
-    roc_pr_specs = [
-        # 10-10 controls, strong bowl 0.2 — main paper + supplement
-        (f"screening-residuals-10-10-0.2-pna-0.99{tag}.csv", "10-10-0.2-1.png",  6, 6,  True),   # Fig 3f
-        (f"screening-residuals-10-10-0.2-pna-0.95{tag}.csv", "10-10-0.2-5.png",  9, 9,  True),   # Fig 3g
-        (f"screening-residuals-10-10-0.2-pna-0.9{tag}.csv",  "10-10-0.2-10.png", 0, 0,  True),   # Fig 23a
-        (f"screening-residuals-10-10-0.2-pna-0.8{tag}.csv",  "10-10-0.2-20.png", 2, 2,  True),   # Fig 23b
-        (f"screening-residuals-10-10-0.2-pna-0.7{tag}.csv",  "10-10-0.2-30.png", 6, 6,  True),   # Fig 23c
-        (f"screening-residuals-10-10-0.2-pna-0.6{tag}.csv",  "10-10-0.2-40.png", None, None, True),  # Fig 23d
-
-        # 8-8 controls, bowl 0.1 — supplement Figures 24a–f
-        (f"screening-residuals-8-8-0.1-pna-0.99{tag}.csv", "8-8-0.1-1.png",  None, None, False),
-        (f"screening-residuals-8-8-0.1-pna-0.95{tag}.csv", "8-8-0.1-5.png",  1,    1,    False),
-        (f"screening-residuals-8-8-0.1-pna-0.9{tag}.csv",  "8-8-0.1-10.png", 6,    6,    False),
-        (f"screening-residuals-8-8-0.1-pna-0.8{tag}.csv",  "8-8-0.1-20.png", 6,    6,    False),
-        (f"screening-residuals-8-8-0.1-pna-0.7{tag}.csv",  "8-8-0.1-30.png", 6,    6,    False),
-        (f"screening-residuals-8-8-0.1-pna-0.6{tag}.csv",  "8-8-0.1-40.png", 3,    3,    True),
-    ]
-
-    for fname, fig_stem, batch_roc, batch_pr, print_table in roc_pr_specs:
-        residuals_path = data_dir + fname
-        roc_fig = "ROC-" + fig_stem
-        pr_fig  = "PR-"  + fig_stem
-        print(f"  ROC/PR: {fig_stem}")
-
-        roc_kwargs = {"batch": batch_roc} if batch_roc is not None else {}
-        pr_kwargs  = {"batch": batch_pr}  if batch_pr  is not None else {}
-
-        util.plot_roc_curves(residuals_path, roc_fig, fig_dir, **roc_kwargs)
-        util.plot_pr_curves( residuals_path, pr_fig,  fig_dir, **pr_kwargs)
-
-        if print_table:
-            util.roc_table_code(residuals_path)
-            print("--------------")
-            util.pr_table_code(residuals_path)
+# ----------------------------------------------------------------------
+# CLI
+# ----------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Stage 3 — Auto-generated LaTeX AUC table
-# ---------------------------------------------------------------------------
-
-def generate_auc_latex_table(config: ScreeningConfig) -> None:
-    """
-    Replaces the hardcoded ROC-AUC / PR-AUC table in 0b_figures_tables.tex
-    by computing values from the same residuals CSVs used by the ROC/PR plots.
-
-    Output: latex-tables/screening_pr_10-10-0.2.tex
-    """
-    from sklearn import metrics as skmetrics
-
-    config.latex_tables_dir.mkdir(parents=True, exist_ok=True)
-    data_dir = str(config.data_dir) + "/"
-    tag = config.today_tag
-
-    hit_rates   = [1, 5, 10, 20, 30, 40]
-    pna_values  = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
-    batches_roc = [6, 9, 0, 2, 6, None]   # match notebook batch selections
-    layouts     = ["random", "plaid", "compd"]
-
-    # Accumulate: summary[hit_rate][layout] = {"roc": [...], "pr": [...]}
-    summary = {}
-    for hit_rate, pna, batch in zip(hit_rates, pna_values, batches_roc):
-        fname = f"screening-residuals-10-10-0.2-pna-{pna}{tag}.csv"
-        path = data_dir + fname
-        if not os.path.exists(path):
-            print(f"  SKIP (missing): {fname}")
-            continue
-
-        df = pd.read_csv(path)
-        if batch is not None:
-            df = df[df["batch"] == batch]
-
-        summary[hit_rate] = {}
-        for layout in layouts:
-            sub = df[df["layout"] == layout]
-            if sub.empty:
-                summary[hit_rate][layout] = {"roc": float("nan"), "pr": float("nan")}
-                continue
-            y_true = (sub["activity"] > 0).astype(int)
-            y_score = -sub["true_residuals"]   # lower residual → more likely active
-            roc_auc = skmetrics.roc_auc_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
-            pr_auc  = skmetrics.average_precision_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
-            summary[hit_rate][layout] = {"roc": roc_auc, "pr": pr_auc}
-
-    # Build LaTeX table
-    col_labels = ["Random ROC", "PLAID ROC", "COMPD ROC",
-                  "Random PR",  "PLAID PR",  "COMPD PR"]
-    lines = [
-        r"\begin{tabular}{r" + "c" * 6 + r"}",
-        r"\toprule",
-        r"Hit rate & " + " & ".join(col_labels) + r" \\",
-        r"\midrule",
-    ]
-    for hit_rate in hit_rates:
-        if hit_rate not in summary:
-            continue
-        row = [f"{hit_rate}\\%"]
-        for metric in ["roc", "pr"]:
-            for layout in layouts:
-                val = summary[hit_rate][layout].get(metric, float("nan"))
-                row.append(f"{val:.3f}" if not np.isnan(val) else "--")
-        lines.append(" & ".join(row) + r" \\")
-    lines += [r"\bottomrule", r"\end{tabular}"]
-
-    out_path = config.latex_tables_dir / "screening_pr_10-10-0.2.tex"
-    out_path.write_text("\n".join(lines))
-    print(f"  Written: {out_path}")
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
-
-def parse_args():
-    p = argparse.ArgumentParser(description="Screening benchmark script")
-    p.add_argument(
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run COMPD/PLAID dose–response benchmark pipeline."
+    )
+    parser.add_argument(
         "--stage",
-        choices=["all", "simulate", "figures", "tables"],
+        choices=["simulate", "figures", "curves", "all"],
         default="all",
-        help="Which stage(s) to run (default: all)",
+        help="Which part of the pipeline to run.",
     )
-    p.add_argument(
-        "--run-tag",
-        default="20250623-ROC-supplement",
-        help="Tag embedded in output filenames (must match LaTeX expectations)",
-    )
-    return p.parse_args()
+    args = parser.parse_args()
 
+    cfg = DoseResponseConfig()
 
-def main():
-    args = parse_args()
-    config = ScreeningConfig(run_tag=args.run_tag)
-
-    config.plots_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.stage in ("all", "simulate"):
-        print("\n=== Stage 1: Simulation ===")
-        run_simulations(config)
-
-    if args.stage in ("all", "figures"):
-        print("\n=== Stage 2a: Control layout figures ===")
-        generate_control_figures(config)
-
-        print("\n=== Stage 2b: Expected-vs-obtained panels ===")
-        generate_screening_panels(config)
-
-        print("\n=== Stage 2c: ROC / PR curves ===")
-        generate_roc_pr_curves(config)
-
-    if args.stage in ("all", "tables"):
-        print("\n=== Stage 3: AUC LaTeX table ===")
-        generate_auc_latex_table(config)
-
-    print("\nDone.")
+    if args.stage in ("simulate", "all"):
+        run_simulations(cfg)
+    if args.stage in ("figures", "all"):
+        generate_dose_response_figures(cfg)
+    if args.stage in ("curves", "all"):
+        generate_example_curves(cfg)
 
 
 if __name__ == "__main__":

@@ -82,7 +82,7 @@ class ScreeningConfig:
         default_factory=lambda: [(8, 8), (10, 10), (20, 10)]
     )
     error_strength_list: List[float] = field(
-        default_factory=lambda: [0.06, 0.1, 0.2]
+        default_factory=lambda: [0.03, 0.06, 0.1, 0.2]
     )
     hit_rate_list: List[float] = field(
         default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
@@ -415,7 +415,7 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
         # Supplement (not included)
         (
             "0.03-10-10-0.99-stdev-3-4",
-            f"screening-residuals-10-10-0.06-pna-0.99{cfg.today_tag}.csv",
+            f"screening-residuals-10-10-0.03-pna-0.99{cfg.today_tag}.csv",
             450,
         ),
         # Supplement (not included)
@@ -756,33 +756,33 @@ def generate_auc_latex_table(config: ScreeningConfig) -> None:
 
     hit_rates   = [1, 5, 10, 20, 30, 40]
     pna_values  = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
-    batches_roc = [6, 9, 0, 2, 6, None]   # match notebook batch selections
     layouts     = ["random", "plaid", "compd"]
 
     # Accumulate: summary[hit_rate][layout] = {"roc": [...], "pr": [...]}
-    summary = {}
-    for hit_rate, pna, batch in zip(hit_rates, pna_values, batches_roc):
-        fname = f"screening-residuals-10-10-0.2-pna-{pna}{tag}.csv"
-        path = data_dir + fname
-        if not os.path.exists(path):
-            print(f"  SKIP (missing): {fname}")
+    summary[hit_rate] = {}
+    for layout in layouts:
+        sub = df[df["layout"] == layout]
+        if sub.empty:
+            summary[hit_rate][layout] = {"roc": (float("nan"), float("nan")),
+                                         "pr":  (float("nan"), float("nan"))}
             continue
-
-        df = pd.read_csv(path)
-        if batch is not None:
-            df = df[df["batch"] == batch]
-
-        summary[hit_rate] = {}
-        for layout in layouts:
-            sub = df[df["layout"] == layout]
-            if sub.empty:
-                summary[hit_rate][layout] = {"roc": float("nan"), "pr": float("nan")}
+        
+        # Note: ROC/PR figures (generate_roc_pr_curves) use a single selected batch
+        # for illustrative clarity. This table uses all batches to compute mean ± std,
+        # which is the statistically correct summary for the paper.
+        roc_aucs, pr_aucs = [], []
+        for _batch_id, grp in sub.groupby("batch"):
+            y_true  = (grp["activity"] > 0).astype(int)
+            y_score = -grp["true_residuals"]
+            if y_true.nunique() < 2:
                 continue
-            y_true = (sub["activity"] > 0).astype(int)
-            y_score = -sub["true_residuals"]   # lower residual → more likely active
-            roc_auc = skmetrics.roc_auc_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
-            pr_auc  = skmetrics.average_precision_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
-            summary[hit_rate][layout] = {"roc": roc_auc, "pr": pr_auc}
+            roc_aucs.append(skmetrics.roc_auc_score(y_true, y_score))
+            pr_aucs.append(skmetrics.average_precision_score(y_true, y_score))
+
+        summary[hit_rate][layout] = {
+            "roc": (np.mean(roc_aucs), np.std(roc_aucs)) if roc_aucs else (float("nan"), float("nan")),
+            "pr":  (np.mean(pr_aucs),  np.std(pr_aucs))  if pr_aucs  else (float("nan"), float("nan")),
+        }
 
     # Build LaTeX table
     col_labels = ["Random ROC", "PLAID ROC", "COMPD ROC",
@@ -799,8 +799,11 @@ def generate_auc_latex_table(config: ScreeningConfig) -> None:
         row = [f"{hit_rate}\\%"]
         for metric in ["roc", "pr"]:
             for layout in layouts:
-                val = summary[hit_rate][layout].get(metric, float("nan"))
-                row.append(f"{val:.3f}" if not np.isnan(val) else "--")
+                mean, std = summary[hit_rate][layout].get(metric, (float("nan"), float("nan")))
+                if np.isnan(mean):
+                    row.append("--")
+                else:
+                    row.append(f"{mean:.3f} $\\pm$ {std:.3f}")
         lines.append(" & ".join(row) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
 
@@ -823,6 +826,7 @@ Stages:
   simulate   Generate screening_scores_data-*.csv and screening-residuals-*.csv
   figures    Generate expected-vs-obtained panels, ROC/PR curves, control figures
   metrics    Generate screening_metrics_data-*.csv and SSMD/Z' robustness plots
+  tables     Generate `latex-tables/screening_pr_10-10-0.2` table
   all        Run simulate, then figures, then metrics (default)
 
 Example:

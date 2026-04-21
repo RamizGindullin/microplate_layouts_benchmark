@@ -38,6 +38,7 @@ from typing import Iterable, List, Tuple
 
 import numpy as np
 import pandas as pd
+from sklearn import metrics as skmetrics
 
 import libraries.disturbances as dt
 import libraries.normalization as nrm
@@ -62,6 +63,7 @@ class PlateType:
 class ScreeningConfig:
     base_dir: Path = field(default_factory=lambda: Path("."))
     layouts_root: Path = field(default_factory=lambda: Path("layouts"))
+    latex_tables_dir: Path = field(default_factory=lambda: Path("latex-tables"))
 
     screening_data_dir: Path = field(
         default_factory=lambda: Path("generated-data") / "screening"
@@ -123,12 +125,16 @@ class ScreeningConfig:
 
     id_text: str = "ROC-supplement"
     metrics_id_text: str = "reviewing"
+
+    # Tag controlling file suffixes; keep default matching existing artifacts
+    run_tag: str = "20250623-ROC-supplement"
     batches: int = 10
     lost_rows_range: Iterable[int] = field(default_factory=lambda: range(1, 4))
 
     @property
     def today_tag(self) -> str:
-        return date.today().strftime("-%Y%m%d") + "-" + self.id_text
+        # Preserve the property name but stop depending on the current date
+        return f"-{self.run_tag}"
 
 
 # ---------------------------------------------------------------------------
@@ -397,25 +403,25 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
         # Manuscript Fig 3 a-c
         (
             "0.06-10-10-0.99-stdev-3-4",
-            "screening-residuals-10-10-0.1-pna-0.99-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.1-pna-0.99{cfg.today_tag}.csv",
             450,
         ),
         # Supplement Fig 20
         (
             "0.08-10-10-0.99-stdev-3-4",
-            "screening-residuals-10-10-0.2-pna-0.99-20250623-ROC-supplement.csv",
+             f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",
             450,
         ),
         # Supplement (not included)
         (
             "0.03-10-10-0.99-stdev-3-4",
-            "screening-residuals-10-10-0.06-pna-0.99-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.06-pna-0.99{cfg.today_tag}.csv",
             450,
         ),
         # Supplement (not included)
         (
             "0.05-10-10-0.99-stdev-3-4",
-            "screening-residuals-10-10-0.05-pna-0.99-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.05-pna-0.99{cfg.today_tag}.csv",
             250,
         ),
     ]
@@ -442,68 +448,68 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
     cases = [
         # Manuscript Fig 3f
         (
-            "screening-residuals-10-10-0.2-pna-0.99-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",
             "10-10-0.2-1.png",
             6,
         ),
         # Manuscript Fig 3g
         (
-            "screening-residuals-10-10-0.2-pna-0.95-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.95{cfg.today_tag}.csv",
             "10-10-0.2-5.png",
             9,
         ),
         # Supplement Fig 23a
         (
-            "screening-residuals-10-10-0.2-pna-0.9-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.9{cfg.today_tag}.csv",
             "10-10-0.2-10.png",
             0,
         ),
         # Supplement Fig 23b
         (
-            "screening-residuals-10-10-0.2-pna-0.8-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.8{cfg.today_tag}.csv",
             "10-10-0.2-20.png",
             2,
         ),
         # Supplement Fig 23c
         (
-            "screening-residuals-10-10-0.2-pna-0.7-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.7{cfg.today_tag}.csv",
             "10-10-0.2-30.png",
             6,
         ),
         # Supplement Fig 23d
         (
-            "screening-residuals-10-10-0.2-pna-0.6-20250623-ROC-supplement.csv",
+            f"screening-residuals-10-10-0.2-pna-0.6{cfg.today_tag}.csv",
             "10-10-0.2-40.png",
             None,
         ),
         # Supplement Fig 24a-f  (8,8 controls)
         (
-            "screening-residuals-8-8-0.1-pna-0.99-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.99{cfg.today_tag}.csv",
             "8-8-0.1-1.png",
             None,
         ),
         (
-            "screening-residuals-8-8-0.1-pna-0.95-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.95{cfg.today_tag}.csv",
             "8-8-0.1-5.png",
             1,
         ),
         (
-            "screening-residuals-8-8-0.1-pna-0.9-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.9{cfg.today_tag}.csv",
             "8-8-0.1-10.png",
             6,
         ),
         (
-            "screening-residuals-8-8-0.1-pna-0.8-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.8{cfg.today_tag}.csv",
             "8-8-0.1-20.png",
             6,
         ),
         (
-            "screening-residuals-8-8-0.1-pna-0.7-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.7{cfg.today_tag}.csv",
             "8-8-0.1-30.png",
             6,
         ),
         (
-            "screening-residuals-8-8-0.1-pna-0.6-20250623-ROC-supplement.csv",
+            f"screening-residuals-8-8-0.1-pna-0.6{cfg.today_tag}.csv",
             "8-8-0.1-40.png",
             3,
         ),
@@ -732,6 +738,78 @@ def run_metrics(cfg: ScreeningConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Stage 4 — Auto-generated LaTeX AUC table
+# ---------------------------------------------------------------------------
+
+def generate_auc_latex_table(config: ScreeningConfig) -> None:
+    """
+    Replaces the hardcoded ROC-AUC / PR-AUC table in 0b_figures_tables.tex
+    by computing values from the same residuals CSVs used by the ROC/PR plots.
+
+    Output: latex-tables/screening_pr_10-10-0.2.tex
+    """
+    from sklearn import metrics as skmetrics
+
+    config.latex_tables_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = str(config.data_dir) + "/"
+    tag = config.today_tag
+
+    hit_rates   = [1, 5, 10, 20, 30, 40]
+    pna_values  = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
+    batches_roc = [6, 9, 0, 2, 6, None]   # match notebook batch selections
+    layouts     = ["random", "plaid", "compd"]
+
+    # Accumulate: summary[hit_rate][layout] = {"roc": [...], "pr": [...]}
+    summary = {}
+    for hit_rate, pna, batch in zip(hit_rates, pna_values, batches_roc):
+        fname = f"screening-residuals-10-10-0.2-pna-{pna}{tag}.csv"
+        path = data_dir + fname
+        if not os.path.exists(path):
+            print(f"  SKIP (missing): {fname}")
+            continue
+
+        df = pd.read_csv(path)
+        if batch is not None:
+            df = df[df["batch"] == batch]
+
+        summary[hit_rate] = {}
+        for layout in layouts:
+            sub = df[df["layout"] == layout]
+            if sub.empty:
+                summary[hit_rate][layout] = {"roc": float("nan"), "pr": float("nan")}
+                continue
+            y_true = (sub["activity"] > 0).astype(int)
+            y_score = -sub["true_residuals"]   # lower residual → more likely active
+            roc_auc = skmetrics.roc_auc_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
+            pr_auc  = skmetrics.average_precision_score(y_true, y_score) if y_true.nunique() > 1 else float("nan")
+            summary[hit_rate][layout] = {"roc": roc_auc, "pr": pr_auc}
+
+    # Build LaTeX table
+    col_labels = ["Random ROC", "PLAID ROC", "COMPD ROC",
+                  "Random PR",  "PLAID PR",  "COMPD PR"]
+    lines = [
+        r"\begin{tabular}{r" + "c" * 6 + r"}",
+        r"\toprule",
+        r"Hit rate & " + " & ".join(col_labels) + r" \\",
+        r"\midrule",
+    ]
+    for hit_rate in hit_rates:
+        if hit_rate not in summary:
+            continue
+        row = [f"{hit_rate}\\%"]
+        for metric in ["roc", "pr"]:
+            for layout in layouts:
+                val = summary[hit_rate][layout].get(metric, float("nan"))
+                row.append(f"{val:.3f}" if not np.isnan(val) else "--")
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+
+    out_path = config.latex_tables_dir / "screening_pr_10-10-0.2.tex"
+    out_path.write_text("\n".join(lines))
+    print(f"  Written: {out_path}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -755,7 +833,7 @@ Example:
     )
     p.add_argument(
         "--stage",
-        choices=["all", "simulate", "figures", "metrics"],
+        choices=["all", "simulate", "figures", "metrics", "tables"],
         default="all",
     )
     return p.parse_args()
@@ -774,6 +852,8 @@ def main() -> None:
     if args.stage in {"all", "metrics"}:
         run_metrics(cfg)
 
+    if args.stage in {"all", "tables"}:
+        generate_auc_latex_table(cfg)
 
 if __name__ == "__main__":
     main()

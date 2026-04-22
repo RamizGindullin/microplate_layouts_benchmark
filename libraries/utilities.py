@@ -106,6 +106,21 @@ def _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep):
     return df
 
 
+
+def _prepare_dose_response_residuals_frame(residuals_1rep, residuals_2rep, residuals_3rep):
+    columns = ["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"]
+    frame1 = pd.DataFrame(residuals_1rep, columns=columns)
+    frame1.insert(0, "replicates", 1)
+    frame2 = pd.DataFrame(residuals_2rep, columns=columns)
+    frame2.insert(0, "replicates", 2)
+    frame3 = pd.DataFrame(residuals_3rep, columns=columns)
+    frame3.insert(0, "replicates", 3)
+    df = pd.concat([frame1, frame2, frame3], ignore_index=True)
+    df["layout"] = classify_dose_response_layout_series(df["layout"].astype(str).tolist())
+    df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
+    return df
+
+
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
     fig, ax = plt.subplots(figsize=(11, 7))
     ax.xaxis.tick_top()
@@ -113,6 +128,7 @@ def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=
     sns.heatmap(plate_array,linewidth=0.3,square=True,mask=mask,vmin=vmin,vmax=vmax)
     if filename:
         fig.savefig(filename,bbox_inches='tight')
+    plt.close(fig)
     plt.show()
     plt.close(fig)
     
@@ -277,87 +293,35 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     
     
 def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
-    """ Plots residual plots for dose response experiments as in the manuscript.
-    
-    Args:
-        residuals_1rep:
-        residuals_2rep:
-        residuals_3rep:
-        fig_name:
-        y_max: maximum value for the y (vertical) axis
-        leg_loc: location of the legend, for example, "upper left", "lower right"
-        leg_ncol: number of columns in the legend
-        leg_fontsize: font size for the legend
-    """
-        
-    residuals_df = pd.DataFrame(residuals_1rep, columns=["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"])
-    residuals_df_2rep = pd.DataFrame(residuals_2rep, columns=["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"])
-    residuals_df_3rep = pd.DataFrame(residuals_3rep, columns=["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"])
+    """ Plots residual plots for dose response experiments as in the manuscript. """
+    residuals_df = _prepare_dose_response_residuals_frame(
+        residuals_1rep, residuals_2rep, residuals_3rep
+    )
+    residuals_df = residuals_df.rename(columns={"replicates": "Replicate", "layout": "Layout type", "residuals": "Residuals"})
+    comparison_labels, _ = _dose_response_layout_labels_for_frame(hue_order)
+    if box_pairs is None:
+        box_pairs = dose_response_legacy_box_pairs_by_replicate(comparison_labels)
 
-    residuals_df.insert(0, 'replicates', 1)
-    residuals_df_2rep.insert(0, 'replicates', 2)
-    residuals_df_3rep.insert(0, 'replicates', 3)
-
-    residuals_df = pd.concat([residuals_df,residuals_df_2rep])
-    residuals_df = pd.concat([residuals_df,residuals_df_3rep])
-
-    residuals_df.residuals = pd.to_numeric(residuals_df.residuals, errors='coerce')
-    residuals_df.true_residuals = pd.to_numeric(residuals_df.true_residuals, errors='coerce')
-    residuals_df['rows lost'] = pd.to_numeric(residuals_df['rows lost'], errors='coerce')
-
-    residuals_df = residuals_df[(residuals_df['rows lost']<=1)]
-
-    ## Rename the layouts so they can be grouped as PLAID, RANDOM or Border
-    residuals_df.loc[(residuals_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    residuals_df.loc[(residuals_df['layout'] >= "plate_layout_40") & (residuals_df['layout'] != "Random"), 'layout'] = "COMPD"
-    residuals_df.loc[(residuals_df['layout'] >= "plate_layout_20") & (residuals_df['layout'] != "Random") & (residuals_df['layout'] != "COMPD"), 'layout'] = "PLAID"
-    residuals_df = residuals_df.sort_values('layout', key = lambda s: s.apply(['Random','PLAID','COMPD'].index))
-
-    box_pairs = [((2,"PLAID"), (2,"Random")),
-                 ((2,"COMPD"), (2,"PLAID")),
-                 ((3,"PLAID"), (3,"Random")),
-                 ((3,"COMPD"), (3,"PLAID")),
-                 ((1,"PLAID"), (1,"Random")),
-                 ((1,"COMPD"), (1,"PLAID")),
-                 ((2,"COMPD"), (2,"Random")),
-                 ((3,"COMPD"), (3,"Random")),
-                 ((1,"COMPD"), (1,"Random")),
-                ]
-    hue_order = ["Random", "PLAID", "COMPD"]
-    
-    fig, ax = plt.subplots(figsize=(4, 3))
-    
-    if y_max:
-        ax.set(ylim=(0,y_max))
-
-    palette = ["#b7a2d8", "#765591", "#37185d"] #Dark purple
-    ax = sns.barplot(x='replicates', y="true_residuals", data=residuals_df, hue="layout", hue_order= hue_order, palette=sns.color_palette(palette, 3))#'rocket_r')
-    plt.ylabel("Mean residuals", fontsize = 10)
-    plt.legend(ncol=leg_ncol, loc=leg_loc, fontsize = leg_fontsize)
-        
-    #palette = ["#fac8eb", "#b75591", "#76185d"] #Pink
-    #ax = sns.barplot(x='replicates', y="residuals", data=residuals_df, hue="layout", palette=sns.color_palette(palette, 3))#'rocket_r')
-    #plt.ylabel("Fit Residuals")
-
-    #box_pairs = [((3,"Effective"),(3,"Random")),((1,"Effective"),(1,"Random")),((1,"Random"),(1,"Border")),((1,"Effective"),(1,"Border")),((2,"Random"),(2,"Border")),((2,"Effective"),(2,"Border")),((3,"Random"),(3,"Border")),((3,"Effective"),(3,"Border"))]
-    
-    ## Add annotations to the plot
-#    annotator = Annotator(ax, pairs=[((2,"Effective"),(2,"Random"))], data=residuals_df, x='replicates', y="true_residuals",hue='layout', order=[1,2,3],hue_order=["Effective","Random","Border"])
- #   annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
-  #  annotator.apply_and_annotate()
-
-    annotator = Annotator(ax, pairs=box_pairs, data=residuals_df, x='replicates', y="true_residuals",hue='layout', order=[1,2,3],hue_order=hue_order)
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
-    annotator.apply_and_annotate()
-    
-
-    fig.savefig(fig_dir+"residuals"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
+    fig,ax = plt.subplots(figsize=(4,5))
+    palette = ['#4c72b0', '#55a868', '#c44e52']
+    sns.boxplot(data=residuals_df, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
+    _apply_boxplot_annotations(
+        ax,
+        data=residuals_df,
+        x='Replicate',
+        y='Residuals',
+        pairs=box_pairs,
+        order=[1, 2, 3],
+        hue='Layout type',
+        hue_order=comparison_labels,
+    )
+    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+    ax.set_ylim(top=y_max)
+    plt.tight_layout()
+    fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
+    plt.show()
 
-  
-
-    
 def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3=None, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
@@ -402,8 +366,8 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
 
-    results_df.loc[(results_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    results_df.loc[(results_df['layout'] >= "plate_layout_40") & (results_df['layout'] != "Random"), 'layout'] = "COMPD"
+    # replaced by classify_dose_response_layout_series
+    # replaced by classify_dose_response_layout_series
     results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
     
     results_df = results_df.sort_values('layout', key = lambda s: s.apply(['Random','PLAID','COMPD'].index))
@@ -471,101 +435,28 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """
     Plotting the percentage of low-quality curves for dose-response simulations as in the manuscript.
-    
     """
-    
-    results_df = pd.DataFrame(data_1rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_2rep = pd.DataFrame(data_2rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_3rep = pd.DataFrame(data_3rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
+    results_df = _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep)
+    results_df = _coerce_numeric_column(results_df, "r2_score")
+    results_df["low_quality_curve"] = results_df["r2_score"] < 0.8
+    low_r2 = (
+        results_df.groupby(["replicates", "layout"], as_index=False)["low_quality_curve"]
+        .mean()
+        .rename(columns={"replicates": "Replicate", "layout": "Layout type", "low_quality_curve": "Residuals"})
+    )
+    low_r2["Residuals"] = low_r2["Residuals"] * 100.0
+    comparison_labels, _ = _dose_response_layout_labels_for_frame(hue_order)
 
-    results_df.insert(0, 'replicates', 1)
-    results_df_2rep.insert(0, 'replicates', 2)
-    results_df_3rep.insert(0, 'replicates', 3)
-
-    results_df = pd.concat([results_df,results_df_2rep])
-    results_df = pd.concat([results_df,results_df_3rep])
-
-    results_df.r2_score = pd.to_numeric(results_df.r2_score, errors='coerce')
-
-    results_df.loc[(results_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    results_df.loc[(results_df['layout'] >= "plate_layout_40") & (results_df['layout'] != "Random"), 'layout'] = "COMPD"
-    results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
-
-    all_plaid_1rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==1)].shape[0]
-    all_plaid_2rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==2)].shape[0]
-    all_plaid_3rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==3)].shape[0]
-
-    all_random_1rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==1)].shape[0]
-    all_random_2rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==2)].shape[0]
-    all_random_3rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==3)].shape[0]
-
-    all_border_1rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==1)].shape[0]
-    all_border_2rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==2)].shape[0]
-    all_border_3rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==3)].shape[0]
-
-    #results_df = results_df[np.logical_not(np.isinf(results_df['MSE']))]
-    results_df = results_df[results_df.r2_score<0.8]
-
-    plaid_1rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==1)].shape[0]
-    plaid_2rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==2)].shape[0]
-    plaid_3rep = results_df.loc[(results_df['layout']=="PLAID") & (results_df['replicates']==3)].shape[0]
-
-    random_1rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==1)].shape[0]
-    random_2rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==2)].shape[0]
-    random_3rep = results_df.loc[(results_df['layout']=="Random") & (results_df['replicates']==3)].shape[0]
-
-    border_1rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==1)].shape[0]
-    border_2rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==2)].shape[0]
-    border_3rep = results_df.loc[(results_df['layout']=="COMPD") & (results_df['replicates']==3)].shape[0]
-
-    percentage_data = [
-        ["Random", 1, 100*random_1rep/all_random_1rep],
-        ["PLAID",  1, 100*plaid_1rep/all_plaid_1rep],
-        ["COMPD",  1, 100*border_1rep/all_border_1rep],
-        ["Random", 2, 100*random_2rep/all_random_2rep],
-        ["PLAID",  2, 100*plaid_2rep/all_plaid_2rep],
-        ["COMPD",  2, 100*border_2rep/all_border_2rep],
-        ["Random", 3, 100*random_3rep/all_random_3rep],
-        ["PLAID",  3, 100*plaid_3rep/all_plaid_3rep],
-        ["COMPD",  3, 100*border_3rep/all_border_3rep]
-    ]
-    
-    
-    box_pairs = [((2,"PLAID"), (2,"Random")),
-                 ((2,"COMPD"), (2,"PLAID")),
-                 ((3,"PLAID"), (3,"Random")),
-                 ((3,"COMPD"), (3,"PLAID")),
-                 ((1,"PLAID"), (1,"Random")),
-                 ((1,"COMPD"), (1,"PLAID")),
-                 ((2,"COMPD"), (2,"Random")),
-                 ((3,"COMPD"), (3,"Random")),
-                 ((1,"COMPD"), (1,"Random")),
-                ]
-    hue_order = ["Random", "PLAID", "COMPD"]
-
-    print(percentage_data)
-
-    percentage_data_df = pd.DataFrame(percentage_data, columns=["layout", "replicates", "percent"])
-
-    fig, ax = plt.subplots(figsize=(4, 3))
-    
-    if y_max:
-        ax.set(ylim=(0,y_max))
-        
-    palette = ["#bc5090", "#ff6361", "#ffa600"]
-    ax = sns.barplot(x='replicates', y="percent", data=percentage_data_df, hue="layout", hue_order=hue_order, palette=sns.color_palette(palette, 3))    
-    
-    plt.ylabel("Percentage", fontsize = 10)
-    plt.legend(ncol=leg_ncol, loc=leg_loc, fontsize = leg_fontsize)
-
-    
-    # Show and save figure!
-    fig.savefig(fig_dir+"percentage-low-r2-curves-1-2-3"+fig_name+".png",bbox_inches='tight')
-    plt.show()
+    fig,ax = plt.subplots(figsize=(3.2,3.2))
+    palette = ['#4c72b0', '#55a868', '#c44e52']
+    sns.boxplot(data=low_r2, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
+    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+    ax.set_ylim(top=y_max)
+    plt.tight_layout()
+    fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
+    plt.show()
 
-    
-    
 def create_latex_table(data, tex_filename, column_name="MSE"):
     # Open file
     latex_f=open(tex_filename,'w')
@@ -575,8 +466,8 @@ def create_latex_table(data, tex_filename, column_name="MSE"):
     results_df = results_df.sort_values("MSE")
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
-    results_df.loc[(results_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    results_df.loc[(results_df['layout'] >= "plate_layout_40") & (results_df['layout'] != "Random"), 'layout'] = "COMPD"
+    # replaced by classify_dose_response_layout_series
+    # replaced by classify_dose_response_layout_series
     results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
 
     results_df.d = pd.to_numeric(results_df.d, errors='coerce')
@@ -629,8 +520,8 @@ def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table
     results_df = results_df.sort_values(column_name)
     results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
     
-    results_df.loc[(results_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    results_df.loc[(results_df['layout'] >= "plate_layout_40") & (results_df['layout'] != "Random"), 'layout'] = "COMPD"
+    # replaced by classify_dose_response_layout_series
+    # replaced by classify_dose_response_layout_series
     results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
     
 #    plaid_description = results_df[results_df['layout']=='Effective'].describe()
@@ -686,8 +577,8 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
     results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
     results_df = results_df[np.logical_not(np.isinf(results_df[column_name]))]
     
-    results_df.loc[(results_df['layout'] >= "plate_layout_rand"), 'layout'] = "Random"
-    results_df.loc[(results_df['layout'] >= "plate_layout_40") & (results_df['layout'] != "Random"), 'layout'] = "COMPD"
+    # replaced by classify_dose_response_layout_series
+    # replaced by classify_dose_response_layout_series
     results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
     
     layouts = ['Random','PLAID','COMPD']
@@ -714,273 +605,6 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
 
     
     
-def plotting_ssmd_scores(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
-    order = SCREENING_LAYOUT_ORDER
-    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
-    screening_scores_df = pd.read_csv(screening_scores_data_filename)
-
-    ## No rows lost!
-    screening_scores_df = screening_scores_df[screening_scores_df['lost_rows']<1]
-
-    screening_scores_df['Zfactor_expected'] = pd.to_numeric(screening_scores_df['Zfactor_expected'], errors='coerce')
-    screening_scores_df['Zfactor_norm'] = pd.to_numeric(screening_scores_df['Zfactor_norm'], errors='coerce')
-    screening_scores_df['Zfactor_raw'] = pd.to_numeric(screening_scores_df['Zfactor_raw'], errors='coerce')
-
-    screening_scores_df['SSMD_expected'] = pd.to_numeric(screening_scores_df['SSMD_expected'], errors='coerce')
-    screening_scores_df['SSMD_norm'] = pd.to_numeric(screening_scores_df['SSMD_norm'], errors='coerce')
-    screening_scores_df['SSMD_raw'] = pd.to_numeric(screening_scores_df['SSMD_raw'], errors='coerce')
-
-    screening_scores_df['SSMD_abs'] = np.abs(screening_scores_df['SSMD_raw'])
-    screening_scores_df['SSMD_norm_abs'] = np.abs(screening_scores_df['SSMD_norm'])
-    
-    ### This is only needed when the specific layout name is stored in 'layout' ###
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_rand"), 'layout'] = "RANDOM"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_border") & (screening_scores_df['layout'] != "RANDOM"), 'layout'] = "BORDER"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout") & (screening_scores_df['layout'] != "RANDOM") & (screening_scores_df['layout'] != "BORDER"), 'layout'] = "PLAID"
-
-    # Plotting
-    plotting_ssmd_scores_df = screening_scores_df[['layout','SSMD_norm_abs','lost_rows']]
-    plotting_ssmd_scores_df = plotting_ssmd_scores_df.rename(columns={'SSMD_norm_abs': 'SSMD'})
-
-    plotting_ssmd_scores_df.insert(0, 'type', 'Normalised')
-
-
-    plotting_ssmd_scores_temp_df = screening_scores_df[['layout','SSMD_abs','lost_rows']]
-    plotting_ssmd_scores_temp_df = plotting_ssmd_scores_temp_df.rename(columns={'SSMD_abs': 'SSMD'})
-
-    plotting_ssmd_scores_temp_df.insert(0, 'type', 'Raw')
-
-    plotting_ssmd_scores_df = pd.concat([plotting_ssmd_scores_df,plotting_ssmd_scores_temp_df])
-
-    plotting_ssmd_scores_df.loc[(plotting_ssmd_scores_df['layout'] == "random"), 'layout'] = "Random"
-    plotting_ssmd_scores_df.loc[(plotting_ssmd_scores_df['layout'] == "compd"), 'layout'] = "COMPD"
-    plotting_ssmd_scores_df.loc[(plotting_ssmd_scores_df['layout'] == "plaid"), 'layout'] = "PLAID"
-
-    sns.set_style("whitegrid", {'axes.grid' : False})
-
-    #palette = sns.color_palette("BuPu",3)
-    palette = sns.color_palette("BuPu",4)
-
-    fig, ax = plt.subplots(figsize=(4, 3))
-
-    if y_min:
-        ax.set_ylim(bottom = y_min)
-    if y_max:
-        ax.set_ylim(top = y_max)
-        
-    ax = sns.barplot(x='type', y="SSMD", data=plotting_ssmd_scores_df[plotting_ssmd_scores_df.lost_rows<1], palette=palette,hue='layout', order = ['Raw','Normalised'])#,showfliers = False)
-    ax.set(xlabel='', ylabel='SSMD')
-    plt.legend(ncol=3, loc="lower center", fontsize = 8)
-    plt.ylabel("Mean SSMD", fontsize = 10)
-    plt.tick_params(axis='both', which='major', labelsize=10)
-    #plt.yticks([i for i in range(1,8)])
-    
-    pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
-    box_pairs = [(("Raw","PLAID"),("Raw","Random")),
-                 (("Normalised","PLAID"),("Normalised","Random")),
-                 (("Normalised","Random"),("Normalised","COMPD")),
-                 (("Normalised","PLAID"),("Normalised","COMPD")),
-                 (("Raw","Random"),("Raw","COMPD")),
-                 (("Raw","PLAID"),("Raw","COMPD"))
-                 ]
-
-    annotator = Annotator(ax, pairs=box_pairs, data=plotting_ssmd_scores_df[plotting_ssmd_scores_df.lost_rows<1], x='type', y="SSMD",hue='layout', order=['Raw','Normalised'],hue_order=["Random","PLAID","COMPD"])
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
-    annotator.apply_and_annotate()
-
-    fig.savefig(fig_dir+"screening-ssmd-"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
-    plt.close(fig)
-
-
-    
-    
-def plotting_z_scores(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
-    order = SCREENING_LAYOUT_ORDER
-    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
-    screening_scores_df = pd.read_csv(screening_scores_data_filename)
-
-    ## No rows lost!
-    screening_scores_df = screening_scores_df[screening_scores_df['lost_rows']<1]
-
-    screening_scores_df['Zfactor_expected'] = pd.to_numeric(screening_scores_df['Zfactor_expected'], errors='coerce')
-    screening_scores_df['Zfactor_norm'] = pd.to_numeric(screening_scores_df['Zfactor_norm'], errors='coerce')
-    screening_scores_df['Zfactor_raw'] = pd.to_numeric(screening_scores_df['Zfactor_raw'], errors='coerce')
-
-    screening_scores_df['SSMD_expected'] = pd.to_numeric(screening_scores_df['SSMD_expected'], errors='coerce')
-    screening_scores_df['SSMD_norm'] = pd.to_numeric(screening_scores_df['SSMD_norm'], errors='coerce')
-    screening_scores_df['SSMD_raw'] = pd.to_numeric(screening_scores_df['SSMD_raw'], errors='coerce')
-
-    ### This is only needed when the specific layout name is stored in 'layout' ###
-    #screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_rand"), 'layout'] = "RANDOM"
-    #screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_border") & (screening_scores_df['layout'] != "RANDOM"), 'layout'] = "BORDER"
-    #screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout") & (screening_scores_df['layout'] != "RANDOM") & (screening_scores_df['layout'] != "BORDER"), 'layout'] = "PLAID"
-
-    ## Plotting
-    plotting_z_scores_df = screening_scores_df[['layout','Zfactor_norm']]
-    plotting_z_scores_df = plotting_z_scores_df.rename(columns={'Zfactor_norm': 'Zfactor'})
-
-    plotting_z_scores_df.insert(0, 'type', 'Normalised')
-
-    plotting_z_scores_temp_df = screening_scores_df[['layout','Zfactor_raw']]
-    plotting_z_scores_temp_df = plotting_z_scores_temp_df.rename(columns={'Zfactor_raw': 'Zfactor'})
-
-    plotting_z_scores_temp_df.insert(0, 'type', 'Raw')
-
-    plotting_z_scores_df = pd.concat([plotting_z_scores_df,plotting_z_scores_temp_df])
-
-    plotting_z_scores_df.loc[(plotting_z_scores_df['layout'] == "random"), 'layout'] = "Random"
-    plotting_z_scores_df.loc[(plotting_z_scores_df['layout'] == "plaid"), 'layout'] = "PLAID"
-    plotting_z_scores_df.loc[(plotting_z_scores_df['layout'] == "compd"), 'layout'] = "COMPD"
-
-    sns.set_style("whitegrid", {'axes.grid' : False})
-
-    palette = sns.color_palette("Greens",5)
-
-    fig, ax = plt.subplots(figsize=(4, 3))
-    
-    if y_min:
-        ax.set_ylim(bottom = y_min)
-    if y_max:
-        ax.set_ylim(top = y_max)
-
-    ax = sns.barplot(x='type', y="Zfactor", data=plotting_z_scores_df, palette=palette,hue='layout', order = ['Raw','Normalised'])
-    ax.set(xlabel="", ylabel="Z' factor")
-    plt.tick_params(axis='both', which='major', labelsize=10)
-    plt.legend(ncol=3, loc="upper center", fontsize = 8)
-    plt.ylabel("Mean Z' factor", fontsize = 10)
-
-    pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
-    box_pairs = [(("Raw","PLAID"),("Raw","Random")),
-                 (("Normalised","PLAID"),("Normalised","Random")),
-                 (("Normalised","Random"),("Normalised","COMPD")),
-                 (("Normalised","PLAID"),("Normalised","COMPD")),
-                 (("Raw","Random"),("Raw","COMPD")),
-                 (("Raw","PLAID"),("Raw","COMPD"))
-                 ]
-
-    annotator = Annotator(ax, pairs=box_pairs, data=plotting_z_scores_df, x='type', y="Zfactor",hue='layout', order=['Raw','Normalised'],hue_order=["Random","PLAID","COMPD"])
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
-    annotator.apply_and_annotate()
-
-    fig.savefig(fig_dir+"screening-zpfactor-"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
-    plt.close(fig)
-    
-    
-def plotting_ssmd_scores_norm(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
-    order = SCREENING_LAYOUT_ORDER
-    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
-    screening_scores_df = pd.read_csv(screening_scores_data_filename)
-
-    ## No rows lost!
-    screening_scores_df = screening_scores_df[screening_scores_df['lost_rows']<1]
-
-    screening_scores_df['SSMD_expected'] = pd.to_numeric(screening_scores_df['SSMD_expected'], errors='coerce')
-    screening_scores_df['SSMD_norm'] = pd.to_numeric(screening_scores_df['SSMD_norm'], errors='coerce')
-    screening_scores_df['SSMD_raw'] = pd.to_numeric(screening_scores_df['SSMD_raw'], errors='coerce')
-
-    screening_scores_df['SSMD_abs'] = np.abs(screening_scores_df['SSMD_raw'])
-    screening_scores_df['SSMD_norm_abs'] = np.abs(screening_scores_df['SSMD_norm'])
-    
-    ### This is only needed when the specific layout name is stored in 'layout' ###
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_rand"), 'layout'] = "RANDOM"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_border") & (screening_scores_df['layout'] != "RANDOM"), 'layout'] = "BORDER"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout") & (screening_scores_df['layout'] != "RANDOM") & (screening_scores_df['layout'] != "BORDER"), 'layout'] = "PLAID"
-
-    screening_scores_df.loc[(screening_scores_df['layout'] == "random"), 'layout'] = "Random"
-    screening_scores_df.loc[(screening_scores_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_scores_df.loc[(screening_scores_df['layout'] == "plaid"), 'layout'] = "PLAID"
-
-    sns.set_style("whitegrid", {'axes.grid' : True})
-
-    palette = sns.color_palette("BuPu",4)
-
-    fig, ax = plt.subplots(figsize=(3, 3))
-
-    if y_min:
-        ax.set_ylim(bottom = y_min)
-    if y_max:
-        ax.set_ylim(top = y_max)
-
-        
-    ax = sns.barplot(x='layout', y="SSMD_norm_abs", data=screening_scores_df, palette=palette)#,showfliers = False)
-    ax.set(xlabel='', ylabel='SSMD')
-    #plt.legend(ncol=3, loc="lower center", fontsize = 8)
-    plt.ylabel("Mean SSMD", fontsize = 10)
-    plt.tick_params(axis='both', which='major', labelsize=10)
-    #plt.yticks([i for i in range(1,8)])
-    
-    pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
-    box_pairs = [("PLAID", "Random"), ("Random", "COMPD"), ("PLAID", "COMPD")]
-
-    annotator = Annotator(ax, pairs=box_pairs, data=screening_scores_df, x='layout', y="SSMD_norm_abs", order=["Random","PLAID","COMPD"])
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
-    annotator.apply_and_annotate()
-
-    fig.savefig(fig_dir+"screening-ssmd-"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
-    plt.close(fig)
-
-
-    
-def plotting_z_scores_norm(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
-    order = SCREENING_LAYOUT_ORDER
-    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
-    screening_scores_df = pd.read_csv(screening_scores_data_filename)
-
-    ## No rows lost!
-    screening_scores_df = screening_scores_df[screening_scores_df['lost_rows']<1]
-
-    screening_scores_df['Zfactor_expected'] = pd.to_numeric(screening_scores_df['Zfactor_expected'], errors='coerce')
-    screening_scores_df['Zfactor_norm'] = pd.to_numeric(screening_scores_df['Zfactor_norm'], errors='coerce')
-    screening_scores_df['Zfactor_raw'] = pd.to_numeric(screening_scores_df['Zfactor_raw'], errors='coerce')
-
-    ### This is only needed when the specific layout name is stored in 'layout' ###
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_rand"), 'layout'] = "RANDOM"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout_border") & (screening_scores_df['layout'] != "RANDOM"), 'layout'] = "BORDER"
-#    screening_scores_df.loc[(screening_scores_df['layout'] >= "plate_layout") & (screening_scores_df['layout'] != "RANDOM") & (screening_scores_df['layout'] != "BORDER"), 'layout'] = "PLAID"
-
-    screening_scores_df.loc[(screening_scores_df['layout'] == "random"), 'layout'] = "Random"
-    screening_scores_df.loc[(screening_scores_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_scores_df.loc[(screening_scores_df['layout'] == "plaid"), 'layout'] = "PLAID"
-
-    
-    sns.set_style("whitegrid", {'axes.grid' : True})
-
-    palette = sns.color_palette("Greens",5)
-
-    fig, ax = plt.subplots(figsize=(3, 3))
-    
-    if y_min:
-        ax.set_ylim(bottom = y_min)
-    if y_max:
-        ax.set_ylim(top = y_max)
-    else:
-        ax.set_ylim(top = 1)
-
-
-    ax = sns.barplot(x='layout', y="Zfactor_norm", data=screening_scores_df, palette=palette)
-    ax.set(xlabel="", ylabel="Z' factor")
-    plt.tick_params(axis='both', which='major', labelsize=10)
-    #plt.legend(ncol=3, loc="upper center", fontsize = 8)
-    plt.ylabel("Mean Z' factor", fontsize = 10)
-
-    pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
-    box_pairs = [("PLAID", "Random"), ("Random", "COMPD"), ("PLAID", "COMPD")]
-
-    annotator = Annotator(ax, pairs=box_pairs, data=screening_scores_df, x='layout', y="Zfactor_norm", order=["Random","PLAID","COMPD"])
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
-    annotator.apply_and_annotate()
-
-    fig.savefig(fig_dir+"screening-zpfactor-"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
-    plt.close(fig)
-    
-    
-    
-## Functions used to create the screening/control layouts for the quality assessment metrics experiments
-
 def full_controls_layout(layout, activity_layout, neg_control_id, pos_control_id):
     extended_controls_layout = np.copy(layout)
     num_rows, num_columns = layout.shape
@@ -1092,32 +716,6 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 
 
         
-def generate_absic50_ddiff_tables(absolute_ic50_data_1rep, absolute_ic50_data_2rep, absolute_ic50_data_3rep, fig_name, figures_dir, tables_dir, y_max_absic = None, y_max_d_diff = None, leg_ncol_d_diff=3, leg_loc_d_diff="upper center"):
-    plot_barplot_replicate_data(absolute_ic50_data_1rep, absolute_ic50_data_2rep, absolute_ic50_data_3rep, fig_name="-1-2-3"+fig_name, fig_dir = figures_dir, fig_type='absic50', y_max=y_max_absic)
-    plot_barplot_replicate_data(absolute_ic50_data_1rep, absolute_ic50_data_2rep, absolute_ic50_data_3rep, fig_name="-1-2-3"+fig_name, fig_dir = figures_dir, fig_type='d_diff', y_max=y_max_d_diff, leg_ncol=leg_ncol_d_diff, leg_loc=leg_loc_d_diff)
-
-    create_latex_table(absolute_ic50_data_1rep, tables_dir+"absic50-table-1rep"+fig_name+".tex", column_name="MSE")
-    create_latex_table(absolute_ic50_data_2rep, tables_dir+"absic50-table-2rep"+fig_name+".tex", column_name="MSE")
-    create_latex_table(absolute_ic50_data_3rep, tables_dir+"absic50-table-3rep"+fig_name+".tex", column_name="MSE")
-
-    create_latex_table(absolute_ic50_data_1rep, tables_dir+"diff_d-table-1rep"+fig_name+".tex", column_name="diff_d")
-    create_latex_table(absolute_ic50_data_2rep, tables_dir+"diff_d-table-2rep"+fig_name+".tex", column_name="diff_d")
-    create_latex_table(absolute_ic50_data_3rep, tables_dir+"diff_d-table-3rep"+fig_name+".tex", column_name="diff_d")
-        
-        
-def generate_relic50_r2(relative_ic50_data_1rep, relative_ic50_data_2rep, relative_ic50_data_3rep, fig_name, figures_dir, y_max_relic = None, y_max_r2 = None, pvalue_thresholds=None):
-    
-    if pvalue_thresholds is None:
-        plot_barplot_replicate_data(relative_ic50_data_1rep, relative_ic50_data_2rep, relative_ic50_data_3rep, fig_name="-1-2-3"+fig_name, fig_dir = figures_dir, fig_type='relic50', y_max = y_max_relic)
-    
-    else:
-        plot_barplot_replicate_data(relative_ic50_data_1rep, relative_ic50_data_2rep, relative_ic50_data_3rep, fig_name="-1-2-3"+fig_name, fig_dir = figures_dir, fig_type='relic50', y_max = y_max_relic, pvalue_thresholds=pvalue_thresholds)
-    
-    plot_r2_percentage(relative_ic50_data_1rep, relative_ic50_data_2rep, relative_ic50_data_3rep, fig_name=fig_name, fig_dir = figures_dir, y_max=y_max_r2)
-
-
-    
-    
 def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
 
     screening_residuals_df = pd.read_csv(residuals_filename)
@@ -1246,85 +844,6 @@ def pr_auc_score(y_true, y_score):
     
     return metrics.auc(recall,precision)
 
-def pr_table_code(residuals_filename, batches=10):
-    screening_residuals_df = pd.read_csv(residuals_filename)
-
-    screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
-
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "random"), 'layout'] = "Random"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "plaid"), 'layout'] = "PLAID"
-
-    screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
-    
-    results_plaid = screening_residuals_df[(screening_residuals_df.layout=='PLAID') ]
-    results_random = screening_residuals_df[(screening_residuals_df.layout=='Random') ]
-    results_border = screening_residuals_df[(screening_residuals_df.layout=='COMPD') ]
-
-    plaid_auc_list = [pr_auc_score(results_plaid.loc[results_plaid.batch==b,'activity'],  results_plaid.loc[results_plaid.batch==b,'obtained_result_inv']) for b in range(batches)]
-    random_auc_list = [pr_auc_score(results_random.loc[results_random.batch==b,'activity'],  results_random.loc[results_random.batch==b,'obtained_result_inv']) for b in range(batches)]
-    border_auc_list = [pr_auc_score(results_border.loc[results_border.batch==b,'activity'],  results_border.loc[results_border.batch==b,'obtained_result_inv']) for b in range(batches)]
-
-    print("Mean and std of RANDOM layouts:", round(statistics.mean(random_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(random_auc_list),3))+")")
-    print("Mean and std of PLAID layouts:", round(statistics.mean(plaid_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(plaid_auc_list),3))+")")
-    print("Mean and std of COMPD layouts:", round(statistics.mean(border_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(border_auc_list),3))+")\n")
-
-
-    print("Variance of RANDOM layouts:", statistics.variance(random_auc_list))
-    print("Variance of PLAID layouts:", statistics.variance(plaid_auc_list))
-    print("Variance of COMPD layouts:", statistics.variance(border_auc_list),"\n")
-
-
-    print("Case of equal variance:")
-    print("PLAID vs RANDOM layouts:", stats.ttest_ind(plaid_auc_list,random_auc_list,equal_var = True))
-    print("RANDOM vs COMPD layouts:", stats.ttest_ind(border_auc_list,random_auc_list,equal_var = True))
-    print("PLAID vs COMPD layouts:", stats.ttest_ind(plaid_auc_list,border_auc_list,equal_var = True),"\n")
-
-    print("Case of not equal variance:")
-    print("PLAID vs RANDOM layouts:", stats.ttest_ind(plaid_auc_list,random_auc_list,equal_var = False))
-    print("RANDOM vs COMPD layouts:", stats.ttest_ind(border_auc_list,random_auc_list,equal_var = False))
-    print("PLAID vs COMPD layouts:", stats.ttest_ind(plaid_auc_list,border_auc_list,equal_var = False))
-    
-def roc_table_code(residuals_filename, batches=10):
-    screening_residuals_df = pd.read_csv(residuals_filename)
-
-    screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
-
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "random"), 'layout'] = "Random"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "plaid"), 'layout'] = "PLAID"
-
-    screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
-    
-    results_plaid = screening_residuals_df[(screening_residuals_df.layout=='PLAID') ]
-    results_random = screening_residuals_df[(screening_residuals_df.layout=='Random') ]
-    results_border = screening_residuals_df[(screening_residuals_df.layout=='COMPD') ]
-
-    plaid_auc_list = [metrics.roc_auc_score(results_plaid.loc[results_plaid.batch==b,'activity'],  results_plaid.loc[results_plaid.batch==b,'obtained_result_inv']) for b in range(batches)]
-    random_auc_list = [metrics.roc_auc_score(results_random.loc[results_random.batch==b,'activity'],  results_random.loc[results_random.batch==b,'obtained_result_inv']) for b in range(batches)]
-    border_auc_list = [metrics.roc_auc_score(results_border.loc[results_border.batch==b,'activity'],  results_border.loc[results_border.batch==b,'obtained_result_inv']) for b in range(batches)]
-
-    print("Mean and std of RANDOM layouts:", round(statistics.mean(random_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(random_auc_list),3))+")")
-    print("Mean and std of PLAID layouts:", round(statistics.mean(plaid_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(plaid_auc_list),3))+")")
-    print("Mean and std of COMPD layouts:", round(statistics.mean(border_auc_list),2)," $\\pm$ ("+str(round(statistics.stdev(border_auc_list),3))+")\n")
-
-
-    print("Variance of RANDOM layouts:", statistics.variance(random_auc_list))
-    print("Variance of PLAID layouts:", statistics.variance(plaid_auc_list))
-    print("Variance of COMPD layouts:", statistics.variance(border_auc_list),"\n")
-
-
-    print("Case of equal variance:")
-    print("PLAID vs RANDOM layouts:", stats.ttest_ind(plaid_auc_list,random_auc_list,equal_var = True))
-    print("RANDOM vs COMPD layouts:", stats.ttest_ind(border_auc_list,random_auc_list,equal_var = True))
-    print("PLAID vs COMPD layouts:", stats.ttest_ind(plaid_auc_list,border_auc_list,equal_var = True),"\n")
-
-    print("Case of not equal variance:")
-    print("PLAID vs RANDOM layouts:", stats.ttest_ind(plaid_auc_list,random_auc_list,equal_var = False))
-    print("RANDOM vs COMPD layouts:", stats.ttest_ind(border_auc_list,random_auc_list,equal_var = False))
-    print("PLAID vs COMPD layouts:", stats.ttest_ind(plaid_auc_list,border_auc_list,equal_var = False))
-    
-    
 def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_value=300):
     screening_residuals_df = pd.read_csv(residuals_filename)
 

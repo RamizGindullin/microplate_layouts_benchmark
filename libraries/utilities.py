@@ -513,7 +513,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
   
 
     
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', fig_type='', plot_mse = True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3 = box_pairs_bre_3, pvalue_thresholds=None, hue_order = order_bre):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', fig_type='', plot_mse = True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3 = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE, pvalue_thresholds=None, hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -623,7 +623,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     
     
     
-def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=order_bre):
+def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
     """
     Plotting the percentage of low-quality curves for dose-response simulations as in the manuscript.
     

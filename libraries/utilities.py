@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -10,18 +12,33 @@ from scipy import stats
 from random import randrange
 from sklearn import metrics
 import statistics
-from moepy import lowess, eda
+from moepy import lowess
 from scipy.interpolate import interp1d
 
-box_pairs_erb = [("Effective", "Random"), ("Random", "Border"), ("Effective", "Border")]
-box_pairs_bre = [("Random", "Effective"), ("Border", "Random"), ("Border", "Effective")]
+LAYOUT_DISPLAY_ORDER_BRE = ["Border", "Random", "Effective"]
+LAYOUT_DISPLAY_ORDER_ERB = ["Effective", "Random", "Border"]
 
-order_erb = ["Effective","Random","Border"]
-order_bre = ["Border","Random","Effective"]
 
-box_pairs_erb_3 = [((3,"Effective"),(3,"Random")),((1,"Effective"),(1,"Random")),((1,"Random"),(1,"Border")),((1,"Effective"),(1,"Border")),((2,"Random"),(2,"Border")),((2,"Effective"),(2,"Border")),((3,"Random"),(3,"Border")),((3,"Effective"),(3,"Border"))]
+def _layout_box_pairs(order):
+    return [(order[i], order[j]) for i in range(len(order)) for j in range(i + 1, len(order))]
 
-box_pairs_bre_3 = [((3,"Random"),(3,"Effective")),((3,"Border"),(3,"Random")),((1,"Random"),(1,"Effective")),((1,"Border"),(1,"Random")),((1,"Border"),(1,"Effective")),((2,"Border"),(2,"Random")),((2,"Border"),(2,"Effective")),((3,"Border"),(3,"Effective"))]
+
+def _layout_box_pairs_by_replicate(order, replicates=(1, 2, 3)):
+    return [
+        ((rep, order[i]), (rep, order[j]))
+        for rep in replicates
+        for i in range(len(order))
+        for j in range(i + 1, len(order))
+    ]
+
+
+# Backward-compatible aliases used throughout the legacy plotting code.
+order_bre = LAYOUT_DISPLAY_ORDER_BRE
+order_erb = LAYOUT_DISPLAY_ORDER_ERB
+box_pairs_bre = _layout_box_pairs(order_bre)
+box_pairs_erb = _layout_box_pairs(order_erb)
+box_pairs_bre_3 = _layout_box_pairs_by_replicate(order_bre)
+box_pairs_erb_3 = _layout_box_pairs_by_replicate(order_erb)
 
 
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
@@ -29,10 +46,10 @@ def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=
     ax.xaxis.tick_top()
     plt.title(title, fontsize = 15) 
     sns.heatmap(plate_array,linewidth=0.3,square=True,mask=mask,vmin=vmin,vmax=vmax)
-    plt.show()
-    
     if filename:
         fig.savefig(filename,bbox_inches='tight')
+    plt.show()
+    plt.close(fig)
     
     
 def create_random_layout_controls(plate_id, num_controls=20, num_rows=16, num_columns=24, directory="layouts/controls_manual_layouts"):
@@ -312,7 +329,7 @@ def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
 
 
 
-def plot_well_series(plate_array, norm_plate, layout, neg_control_id, pos_control_id,order=0, vmin=None, vmax=None, filename=None):    
+def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, neg_control_id, pos_control_id, order=0, vmin=None, vmax=None, filename=None):    
     ''' Creates the well series plots used for the PLAID bioseminar presentation
     
     Args:
@@ -329,10 +346,10 @@ def plot_well_series(plate_array, norm_plate, layout, neg_control_id, pos_contro
     ### Reformat original input data
     plate_df = pd.DataFrame(plate_array)
     
-    intensity_df = plate_df.stack().reset_index()
+    intensity_df = plate_df.stack(future_stack=True).reset_index()
     intensity_df.columns = ["Rows","Columns","Intensity"]
     
-    types_df = pd.DataFrame(layout).stack().reset_index()
+    types_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     types_df.columns = ["Rows","Columns","Type"]
     
     combined_df = pd.merge(intensity_df, types_df,  how='left', on=['Rows','Columns'])
@@ -343,7 +360,7 @@ def plot_well_series(plate_array, norm_plate, layout, neg_control_id, pos_contro
     ### Reformat normalized/corrected plate
     n_plate_df = pd.DataFrame(norm_plate)
     
-    n_intensity_df = n_plate_df.stack().reset_index()
+    n_intensity_df = n_plate_df.stack(future_stack=True).reset_index()
     n_intensity_df.columns = ["Rows","Columns","Intensity"]
     
     n_combined_df = pd.merge(n_intensity_df, types_df,  how='left', on=['Rows','Columns'])
@@ -474,8 +491,9 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     annotator.apply_and_annotate()
     
 
-    plt.show()
     fig.savefig(fig_dir+"residuals"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
 
   
 
@@ -580,9 +598,9 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 
 
     #plt.legend().set_title(None)
-    plt.show()
-
     fig.savefig(fig_dir+"dose-response-"+fig_type+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
     
     
     
@@ -682,8 +700,9 @@ def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '
 
     
     # Show and save figure!
-    plt.show()
     fig.savefig(fig_dir+"percentage-low-r2-curves-1-2-3"+fig_name+".png",bbox_inches='tight')
+    plt.show()
+    plt.close(fig)
 
     
     
@@ -907,8 +926,9 @@ def plotting_ssmd_scores(screening_scores_data_filename, fig_name, y_min=None, y
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
     annotator.apply_and_annotate()
 
-    plt.show()
     fig.savefig(fig_dir+"screening-ssmd-"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
 
 
     
@@ -979,8 +999,9 @@ def plotting_z_scores(screening_scores_data_filename, fig_name, y_min=None, y_ma
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
     annotator.apply_and_annotate()
 
-    plt.show()
     fig.savefig(fig_dir+"screening-zpfactor-"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
     
     
 def plotting_ssmd_scores_norm(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
@@ -1031,8 +1052,9 @@ def plotting_ssmd_scores_norm(screening_scores_data_filename, fig_name, y_min=No
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
     annotator.apply_and_annotate()
 
-    plt.show()
     fig.savefig(fig_dir+"screening-ssmd-"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
 
 
     
@@ -1083,8 +1105,9 @@ def plotting_z_scores_norm(screening_scores_data_filename, fig_name, y_min=None,
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', pvalue_thresholds=pvalue_thresholds,text_offset=-1)
     annotator.apply_and_annotate()
 
-    plt.show()
     fig.savefig(fig_dir+"screening-zpfactor-"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
     
     
     
@@ -1194,10 +1217,10 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', text_offset=-1)
     annotator.apply_and_annotate()
 
-    plt.show()
-    
     if fig_name:
         fig.savefig(plots_directory+"screening-"+metric+"-mse-"+fig_name+".png",bbox_inches='tight',dpi=800)
+    plt.show()
+    plt.close(fig)
 
 
         
@@ -1280,11 +1303,10 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batc
                loc='lower right', fontsize = 8)
     plt.xticks(fontsize=8)
     plt.yticks(fontsize=8)
-    plt.show()
-    
-
     if fig_name:
         fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
+    plt.show()
+    plt.close(fig)
     
 
     
@@ -1344,10 +1366,10 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batch
                loc='lower right', fontsize = 8)
     plt.xticks(fontsize=8)
     plt.yticks(fontsize=8)
-    plt.show()
-
     if fig_name:
         fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
+    plt.show()
+    plt.close(fig)
     
 
     
@@ -1466,10 +1488,10 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.ylabel('Response', fontsize = 10)
     plt.xticks([i for i in range(5,41,5)])
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    plt.show()
-
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-expected.png",bbox_inches='tight',dpi=1200)
+    plt.show()
+    plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(4, 3))
     ax.set(ylim=(min_value,max_value))
@@ -1483,10 +1505,10 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.ylabel('Response', fontsize = 10)
     plt.xticks([i for i in range(5,41,5)])
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    plt.show()
-
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-plaid.png",bbox_inches='tight',dpi=1200)
+    plt.show()
+    plt.close(fig)
 
 
     fig, ax = plt.subplots(figsize=(4,3))
@@ -1501,10 +1523,10 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.ylabel('Response', fontsize = 10)
     plt.xticks([i for i in range(5,41,5)])
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    plt.show()
-
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-random.png",bbox_inches='tight',dpi=1200)
+    plt.show()
+    plt.close(fig)
 
 
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -1518,21 +1540,21 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.ylabel('Response', fontsize = 10)
     plt.xticks([i for i in range(5,41,5)])
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    plt.show()
-
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-compd.png",bbox_inches='tight',dpi=1200)
+    plt.show()
+    plt.close(fig)
         
 
 
-def plot_well_series(plate_array, layout, neg_control_id=-1, pos_control_id=-1,order=0,vmin=None,vmax=None,filename=None):
+def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos_control_id=-1, order=0, vmin=None, vmax=None, filename=None):
     
     plate_df = pd.DataFrame(plate_array)
     
-    intensity_df = plate_df.stack().reset_index() ##
+    intensity_df = plate_df.stack(future_stack=True).reset_index() ##
     intensity_df.columns = ["Rows","Columns","Intensity"] ##
     
-    types_df = pd.DataFrame(layout).stack().reset_index() ##
+    types_df = pd.DataFrame(layout).stack(future_stack=True).reset_index() ##
     types_df.columns = ["Rows","Columns","Type"] ##
     
     combined_df = pd.merge(intensity_df, types_df,  how='left', on=['Rows','Columns']) ##
@@ -1593,13 +1615,27 @@ def plot_well_series(plate_array, layout, neg_control_id=-1, pos_control_id=-1,o
     
     ax.set_xticks(range(1,25))
     
-    plt.show()
-    
     if (filename):
         fig.savefig(filename)
+    plt.show()
+    plt.close(fig)
         
     unstack_adjusted_df = y_adjusted[["Rows","Columns","Intensity"]].copy()
     
     unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
     
     return unstacked_adjusted_df.to_numpy()
+
+
+def plot_well_series(*args, **kwargs):
+    """Backward-compatible dispatcher for the two historical plot_well_series APIs.
+
+    Supported call shapes:
+    - plot_well_series(plate_array, norm_plate, layout, neg_control_id, pos_control_id, ...)
+      -> plot_well_series_precomputed_normalization
+    - plot_well_series(plate_array, layout, neg_control_id=-1, pos_control_id=-1, ...)
+      -> plot_well_series_lowess_internal
+    """
+    if len(args) >= 5:
+        return plot_well_series_precomputed_normalization(*args, **kwargs)
+    return plot_well_series_lowess_internal(*args, **kwargs)

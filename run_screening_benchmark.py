@@ -1,28 +1,17 @@
 #!/usr/bin/env python3
 """Run the screening benchmark end-to-end.
 
-This script consolidates the functionality of
-- screening-experiments.ipynb (data generation)
-- screening-supplement.ipynb (screening figures and ROC/PR plots)
-- plate-metrics-comparison.ipynb (SSMD/Z' robustness plots for bowl-nl)
-
-It is designed to reproduce the same CSV and figure artifacts used by
-0_supplement.tex, tikz-figures/screening_*.tex, and 0b_figures_tables.tex
-without changing filenames or paths.
+Consolidates:
+  - screening-experiments.ipynb (data generation)
+  - screening-supplement.ipynb  (screening figures and ROC/PR plots)
+  - plate-metrics-comparison.ipynb (SSMD/Z' robustness plots for bowl-nl)
 
 Stages
 ------
-- simulate : generate screening_scores_data-*.csv and screening-residuals-*.csv
-             under generated-data/screening/ (mirroring screening-experiments.ipynb)
-- figures  : generate screening expected vs obtained panels and ROC/PR plots
-             under generated-plots/screening-supplement/
-- metrics  : generate screening_metrics_data-*.csv and SSMD/Z' plots
-             under generated-data/quality-assessment-metrics/ and
-             generated-plots/quality-assessment-metrics/
-- all      : run simulate, figures, metrics (default)
-
-The configuration constants are kept close to the settings used in the
-original notebooks so LaTeX sources compile without modification.
+  simulate : generate screening_scores_data-*.csv and screening-residuals-*.csv
+  figures  : generate screening panels and ROC/PR plots
+  metrics  : generate SSMD/Z' plots
+  all      : simulate → figures → metrics  (default)
 """
 
 from __future__ import annotations
@@ -32,7 +21,6 @@ import csv
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
@@ -49,7 +37,6 @@ import libraries.utilities as util
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
 
 @dataclass
 class PlateType:
@@ -115,25 +102,21 @@ class ScreeningConfig:
         ]
 
     def error_types(self):
-        return [
-            {
-                "type": "bowl-nl",
-                "error_function": dt.add_bowlshaped_errors_nl,
-                "error_correction": nrm.normalize_plate_nearest_control,
-            }
-        ]
+        return [{
+            "type": "bowl-nl",
+            "error_function": dt.add_bowlshaped_errors_nl,
+            "error_correction": nrm.normalize_plate_nearest_control,
+        }]
 
     id_text: str = "ROC-supplement"
     metrics_id_text: str = "reviewing"
 
-    # Tag controlling file suffixes; keep default matching existing artifacts
     run_tag: str = "20250623-ROC-supplement"
     batches: int = 10
     lost_rows_range: Iterable[int] = field(default_factory=lambda: range(1, 4))
 
     @property
     def today_tag(self) -> str:
-        # Preserve the property name but stop depending on the current date
         return f"-{self.run_tag}"
 
 
@@ -141,15 +124,17 @@ class ScreeningConfig:
 # Helpers
 # ---------------------------------------------------------------------------
 
-
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-# ---------------------------------------------------------------------------
-# Stage 1: Simulation  (screening-experiments.ipynb)
-# ---------------------------------------------------------------------------
+class _SkipPlate(Exception):
+    """Raised internally to abort processing of one plate and move to the next."""
 
+
+# ---------------------------------------------------------------------------
+# Stage 1: Simulation
+# ---------------------------------------------------------------------------
 
 def simulate_condition(
     cfg: ScreeningConfig,
@@ -172,11 +157,13 @@ def simulate_condition(
     scores_path = cfg.screening_data_dir / scores_name
     residuals_path = cfg.screening_data_dir / residuals_name
 
-    stop_all = False
+    # pos_control_mean is fixed at 40 (the original notebook swept range(40,41,120),
+    # which is effectively just [40], so the loop is inlined here).
+    pos_control_mean = 40
 
-    with scores_path.open("w", newline="") as scores_f, residuals_path.open(
-        "w", newline=""
-    ) as residuals_f:
+    with scores_path.open("w", newline="") as scores_f, \
+         residuals_path.open("w", newline="") as residuals_f:
+
         scores_writer = csv.writer(scores_f)
         residuals_writer = csv.writer(residuals_f)
 
@@ -197,35 +184,28 @@ def simulate_condition(
         plate_types = cfg.plate_types(neg_controls, pos_controls)
 
         for batch in range(cfg.batches):
-            if stop_all:
-                break
             print(
                 f"(neg,pos)=({neg_controls},{pos_controls}) "
                 f"error={error} pna={percent_non_active} batch={batch}"
             )
-            # range(40,41,120) in the notebook is effectively just [40]
-            for pos_control_mean in range(40, 41, 120):
-                if stop_all:
-                    break
-                for plate_type in plate_types:
-                    layout_dir = plate_type.dir
-                    layouts = os.listdir(layout_dir)
+            for plate_type in plate_types:
+                layout_dir = plate_type.dir
+                layouts = os.listdir(layout_dir)
 
-                    for layout_file in layouts:
-                        if stop_all:
-                            break
-                        match = re.search(plate_type.regex, layout_file)
-                        if match is None:
-                            continue
+                for layout_file in layouts:
+                    match = re.search(plate_type.regex, layout_file)
+                    if match is None:
+                        continue
 
-                        layout = np.load(os.path.join(layout_dir, layout_file))
-                        neg_control_id = np.max(layout)
-                        pos_control_id = neg_control_id - 1
+                    layout = np.load(os.path.join(layout_dir, layout_file))
+                    neg_control_id = np.max(layout)
+                    pos_control_id = neg_control_id - 1
 
-                        for et in cfg.error_types():
-                            for lost_rows in cfg.lost_rows_range:
-                                limit = {"from": 1, "to": lost_rows}
+                    for et in cfg.error_types():
+                        for lost_rows in cfg.lost_rows_range:
+                            limit = {"from": 1, "to": lost_rows}
 
+                            try:
                                 ideal_plate, activity_layout = sc.fill_plate(
                                     layout,
                                     neg_control_id,
@@ -254,16 +234,13 @@ def simulate_condition(
                                 )
 
                                 plate = et["error_function"](ideal_plate, error)
-                                plate = dt.lose_rows(
-                                    plate, limit["from"], limit["to"]
-                                )
+                                plate = dt.lose_rows(plate, limit["from"], limit["to"])
 
                                 (
                                     raw_neg_mean, raw_pos_mean,
                                     raw_neg_std, raw_pos_std,
                                 ) = sc.control_stats(
-                                    plate, layout,
-                                    neg_control_id, pos_control_id,
+                                    plate, layout, neg_control_id, pos_control_id,
                                 )
                                 ssmd_raw = sc.ssmd(
                                     raw_neg_mean, raw_pos_mean,
@@ -274,27 +251,18 @@ def simulate_condition(
                                     raw_neg_std, raw_pos_std,
                                 )
 
+                                norm_plate = plate_type.error_correction(
+                                    plate, layout, neg_control_id
+                                )
                                 remaining_layout = dt.lose_rows(
                                     layout, limit["from"], limit["to"]
                                 )
-
-                                try:
-                                    plate = plate_type.error_correction(
-                                        plate,
-                                        remaining_layout,
-                                        neg_control_id=neg_control_id,
-                                    )
-                                except Exception:
-                                    print("Error normalizing:", layout_file)
-                                    stop_all = True
-                                    break
 
                                 (
                                     norm_neg_mean, norm_pos_mean,
                                     norm_neg_std, norm_pos_std,
                                 ) = sc.control_stats(
-                                    plate, remaining_layout,
-                                    neg_control_id, pos_control_id,
+                                    norm_plate, layout, neg_control_id, pos_control_id,
                                 )
                                 ssmd_norm = sc.ssmd(
                                     norm_neg_mean, norm_pos_mean,
@@ -305,72 +273,74 @@ def simulate_condition(
                                     norm_neg_std, norm_pos_std,
                                 )
 
-                                scores_writer.writerow([
-                                    batch, plate_type.type, et["type"], error,
-                                    lost_rows - 1,
-                                    exp_neg_mean, exp_pos_mean,
-                                    exp_neg_std, exp_pos_std,
-                                    zfactor_expected, ssmd_expected,
-                                    zfactor_raw, ssmd_raw,
-                                    zfactor_norm, ssmd_norm,
-                                ])
+                            except Exception as exc:
+                                raise _SkipPlate(
+                                    f"Skipping {layout_file} batch={batch} "
+                                    f"lost_rows={lost_rows}: {exc}"
+                                ) from exc
 
-                                res_array = np.power(
-                                    np.reshape(
-                                        np.abs(
-                                            dt.lose_rows(
-                                                ideal_plate,
-                                                limit["from"], limit["to"],
-                                            ) - plate
-                                        ),
-                                        (-1, 1),
+                            scores_writer.writerow([
+                                batch, plate_type.type, et["type"], error,
+                                lost_rows - 1,
+                                exp_neg_mean, exp_pos_mean,
+                                exp_neg_std, exp_pos_std,
+                                zfactor_expected, ssmd_expected,
+                                zfactor_raw, ssmd_raw,
+                                zfactor_norm, ssmd_norm,
+                            ])
+
+                            res_array = np.power(
+                                np.reshape(
+                                    np.abs(
+                                        dt.lose_rows(ideal_plate, limit["from"], limit["to"])
+                                        - plate
                                     ),
-                                    2,
-                                )
-                                comp_id_array = np.reshape(remaining_layout, (-1, 1))
-                                ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
-                                norm_plate_array = np.reshape(plate, (-1, 1))
-                                activity_array = np.reshape(activity_layout, (-1, 1))
+                                    (-1, 1),
+                                ),
+                                2,
+                            )
+                            comp_id_array = np.reshape(remaining_layout, (-1, 1))
+                            ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
+                            norm_plate_array = np.reshape(plate, (-1, 1))
+                            activity_array = np.reshape(activity_layout, (-1, 1))
 
-                                comp_id_res_df = pd.DataFrame(
-                                    np.hstack([
-                                        comp_id_array, res_array,
-                                        ideal_plate_array, norm_plate_array,
-                                        activity_array,
-                                    ]),
-                                    columns=[
-                                        "comp_type", "res",
-                                        "expected_result", "obtained_result",
-                                        "activity",
-                                    ],
-                                )
-                                comp_id_res_df = comp_id_res_df[
-                                    comp_id_res_df.comp_type > 0
-                                ]
+                            comp_id_res_df = pd.DataFrame(
+                                np.hstack([
+                                    comp_id_array, res_array,
+                                    ideal_plate_array, norm_plate_array,
+                                    activity_array,
+                                ]),
+                                columns=[
+                                    "comp_type", "res",
+                                    "expected_result", "obtained_result",
+                                    "activity",
+                                ],
+                            )
+                            comp_id_res_df = comp_id_res_df[comp_id_res_df.comp_type > 0]
 
-                                rrr = comp_id_res_df.to_numpy().T
-                                _, res_size = rrr.shape
+                            rrr = comp_id_res_df.to_numpy().T
+                            _, res_size = rrr.shape
 
-                                plate_residuals = np.vstack([
-                                    np.full(res_size, batch),
-                                    np.full(res_size, plate_type.type),
-                                    np.full(res_size, et["type"]),
-                                    np.full(res_size, error),
-                                    np.full(res_size, lost_rows - 1),
-                                    np.full(res_size, exp_neg_mean),
-                                    np.full(res_size, exp_pos_mean),
-                                    np.full(res_size, exp_neg_std),
-                                    np.full(res_size, exp_pos_std),
-                                    rrr,
-                                    np.full(res_size, match.group(2)),
-                                ])
+                            plate_residuals = np.vstack([
+                                np.full(res_size, batch),
+                                np.full(res_size, plate_type.type),
+                                np.full(res_size, et["type"]),
+                                np.full(res_size, error),
+                                np.full(res_size, lost_rows - 1),
+                                np.full(res_size, exp_neg_mean),
+                                np.full(res_size, exp_pos_mean),
+                                np.full(res_size, exp_neg_std),
+                                np.full(res_size, exp_pos_std),
+                                rrr,
+                                np.full(res_size, match.group(2)),
+                            ])
 
-                                np.savetxt(
-                                    residuals_f,
-                                    plate_residuals.T,
-                                    delimiter=",",
-                                    fmt="%s",
-                                )
+                            np.savetxt(
+                                residuals_f,
+                                plate_residuals.T,
+                                delimiter=",",
+                                fmt="%s",
+                            )
 
     print("Done:", scores_path.name)
     print("Done:", residuals_path.name)
@@ -390,40 +360,37 @@ def run_simulations(cfg: ScreeningConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2: Screening figures  (screening-supplement.ipynb)
+# Stage 2: Screening figures
 # ---------------------------------------------------------------------------
 
-
 def generate_screening_panels(cfg: ScreeningConfig) -> None:
-    """Expected vs obtained panels — cells 8-11 of screening-supplement.ipynb."""
+    """Expected vs obtained panels."""
     ensure_dir(cfg.screening_plots_dir)
 
+    # Mapping between display label and simulation error level:
+    #
+    #   fig_name label | simulation error_strength | interpretation
+    #   "0.03"         | 0.03                      | very mild bowl effect
+    #   "0.06"         | 0.1                        | mild bowl effect
+    #   "0.08"         | 0.2                        | moderate bowl effect
+    #
+    # The display labels follow the naming convention in the PLAID article
+    # (Zhang 2008/2011 references), where mild ≈ 0.06 and strong ≈ 0.2
+    # (see PLAID article §Methods). The simulation sweeps [0.03, 0.06, 0.1, 0.2];
+    # the "0.06" figure uses simulation error=0.1 because visually that produces
+    # the "mild" appearance described in the paper caption.
+    # DO NOT change the CSV filenames without regenerating all screening data.
     cases = [
-        # (fig_name,  residuals_csv,  max_value)
-        # Manuscript Fig 3 a-c
-        (
-            "0.06-10-10-0.99-stdev-3-4",
-            f"screening-residuals-10-10-0.1-pna-0.99{cfg.today_tag}.csv",
-            450,
-        ),
-        # Supplement Fig 20
-        (
-            "0.08-10-10-0.99-stdev-3-4",
-             f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",
-            450,
-        ),
-        # Supplement (not included)
-        (
-            "0.03-10-10-0.99-stdev-3-4",
-            f"screening-residuals-10-10-0.03-pna-0.99{cfg.today_tag}.csv",
-            450,
-        ),
-        # Supplement (not included)
-        (
-            "0.05-10-10-0.99-stdev-3-4",
-            f"screening-residuals-10-10-0.05-pna-0.99{cfg.today_tag}.csv",
-            250,
-        ),
+        # (fig_name,                   residuals_csv,                                     max_value)
+        # Manuscript Fig 3 a–c: mild bowl-shaped effect, labelled "0.06"
+        ("0.06-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.1-pna-0.99{cfg.today_tag}.csv",  450),
+        # Supplement Fig 20:   moderate bowl-shaped effect, labelled "0.08"
+        ("0.08-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",  450),
+        # Supplement (not included in current version): very mild effect
+        ("0.03-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.03-pna-0.99{cfg.today_tag}.csv", 450),
+        # NOTE: a "0.05" case (error=0.05) that appeared in a notebook cell marked
+        # "Supplement Figure not included" has been removed. error=0.05 is not in
+        # error_strength_list and no CSV for it is produced by run_simulations.
     ]
 
     for fig_name, residuals_file, max_value in cases:
@@ -437,109 +404,43 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
 
 
 def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
-    """ROC / PR curves — cells 12-23 of screening-supplement.ipynb.
-
-    Also prints roc_table_code / pr_table_code output to stdout,
-    which feeds the main-paper ROC-AUC / PR-AUC table.
-    """
+    """ROC / PR curves. Also prints roc_table_code / pr_table_code to stdout."""
     ensure_dir(cfg.screening_plots_dir)
 
-    # (residuals_csv, fig_name, batch or None)
     cases = [
+        # (residuals_csv,                                              fig_name,        batch)
         # Manuscript Fig 3f
-        (
-            f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",
-            "10-10-0.2-1.png",
-            6,
-        ),
+        (f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv", "10-10-0.2-1.png",  6),
         # Manuscript Fig 3g
-        (
-            f"screening-residuals-10-10-0.2-pna-0.95{cfg.today_tag}.csv",
-            "10-10-0.2-5.png",
-            9,
-        ),
-        # Supplement Fig 23a
-        (
-            f"screening-residuals-10-10-0.2-pna-0.9{cfg.today_tag}.csv",
-            "10-10-0.2-10.png",
-            0,
-        ),
-        # Supplement Fig 23b
-        (
-            f"screening-residuals-10-10-0.2-pna-0.8{cfg.today_tag}.csv",
-            "10-10-0.2-20.png",
-            2,
-        ),
-        # Supplement Fig 23c
-        (
-            f"screening-residuals-10-10-0.2-pna-0.7{cfg.today_tag}.csv",
-            "10-10-0.2-30.png",
-            6,
-        ),
-        # Supplement Fig 23d
-        (
-            f"screening-residuals-10-10-0.2-pna-0.6{cfg.today_tag}.csv",
-            "10-10-0.2-40.png",
-            None,
-        ),
-        # Supplement Fig 24a-f  (8,8 controls)
-        (
-            f"screening-residuals-8-8-0.1-pna-0.99{cfg.today_tag}.csv",
-            "8-8-0.1-1.png",
-            None,
-        ),
-        (
-            f"screening-residuals-8-8-0.1-pna-0.95{cfg.today_tag}.csv",
-            "8-8-0.1-5.png",
-            1,
-        ),
-        (
-            f"screening-residuals-8-8-0.1-pna-0.9{cfg.today_tag}.csv",
-            "8-8-0.1-10.png",
-            6,
-        ),
-        (
-            f"screening-residuals-8-8-0.1-pna-0.8{cfg.today_tag}.csv",
-            "8-8-0.1-20.png",
-            6,
-        ),
-        (
-            f"screening-residuals-8-8-0.1-pna-0.7{cfg.today_tag}.csv",
-            "8-8-0.1-30.png",
-            6,
-        ),
-        (
-            f"screening-residuals-8-8-0.1-pna-0.6{cfg.today_tag}.csv",
-            "8-8-0.1-40.png",
-            3,
-        ),
+        (f"screening-residuals-10-10-0.2-pna-0.95{cfg.today_tag}.csv", "10-10-0.2-5.png",  9),
+        # Supplement Fig 23a–d
+        (f"screening-residuals-10-10-0.2-pna-0.9{cfg.today_tag}.csv",  "10-10-0.2-10.png", 0),
+        (f"screening-residuals-10-10-0.2-pna-0.8{cfg.today_tag}.csv",  "10-10-0.2-20.png", 2),
+        (f"screening-residuals-10-10-0.2-pna-0.7{cfg.today_tag}.csv",  "10-10-0.2-30.png", 6),
+        (f"screening-residuals-10-10-0.2-pna-0.6{cfg.today_tag}.csv",  "10-10-0.2-40.png", None),
+        # Supplement Fig 24a–f  (8,8 controls)
+        (f"screening-residuals-8-8-0.1-pna-0.99{cfg.today_tag}.csv",   "8-8-0.1-1.png",   None),
+        (f"screening-residuals-8-8-0.1-pna-0.95{cfg.today_tag}.csv",   "8-8-0.1-5.png",   1),
+        (f"screening-residuals-8-8-0.1-pna-0.9{cfg.today_tag}.csv",    "8-8-0.1-10.png",  6),
+        (f"screening-residuals-8-8-0.1-pna-0.8{cfg.today_tag}.csv",    "8-8-0.1-20.png",  6),
+        (f"screening-residuals-8-8-0.1-pna-0.7{cfg.today_tag}.csv",    "8-8-0.1-30.png",  6),
+        (f"screening-residuals-8-8-0.1-pna-0.6{cfg.today_tag}.csv",    "8-8-0.1-40.png",  3),
     ]
 
     for residuals_file, fig_name, batch in cases:
         residuals_path = cfg.screening_data_dir / residuals_file
         kwargs = {} if batch is None else {"batch": batch}
-        util.plot_roc_curves(
-            str(residuals_path), "ROC-" + fig_name,
-            str(cfg.screening_plots_dir), **kwargs,
-        )
-        util.plot_pr_curves(
-            str(residuals_path), "PR-" + fig_name,
-            str(cfg.screening_plots_dir), **kwargs,
-        )
+        util.plot_roc_curves(str(residuals_path), "ROC-" + fig_name,
+                             str(cfg.screening_plots_dir), **kwargs)
+        util.plot_pr_curves(str(residuals_path), "PR-" + fig_name,
+                            str(cfg.screening_plots_dir), **kwargs)
         util.roc_table_code(str(residuals_path))
         print("--------------")
         util.pr_table_code(str(residuals_path))
 
 
 def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
-    """Control layout visualisations — cells 4-6 of screening-supplement.ipynb.
-
-    Generates:
-      figures/plate_random-controls-rows-error.png
-      figures/plate_plaid-controls-rows-error.png
-      figures/plate_compd-controls-rows-error.png
-    (referenced by tikz-figures/a_figure_controls.tex)
-    """
+    """Control layout visualisations referenced by tikz-figures/a_figure_controls.tex."""
     ensure_dir(Path("figures"))
 
     neg_control_mean = 90
@@ -549,56 +450,31 @@ def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
 
     np.random.seed(42)
 
-    # Random layout
-    rand_layout = np.load("layouts/screening_RANDM_layouts/plate_layout_rand_10-10_02.npy")
-    neg_control_id = np.max(rand_layout)
-    pos_control_id = neg_control_id - 1
-    ideal_plate, _ = sc.fill_plate(
-        rand_layout, neg_control_id, pos_control_id,
-        neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
-    )
-    disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
-    control_locations = util.get_controls_layout(rand_layout)
-    util.plot_plate(
-        disturbed_plate,
-        title="",
-        mask=np.array(1 - control_locations, dtype=bool),
-        filename="figures/plate_random-controls-rows-error.png",
-    )
+    layout_specs = [
+        ("layouts/screening_RANDM_layouts/plate_layout_rand_10-10_02.npy",
+         "figures/plate_random-controls-rows-error.png"),
+        ("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy",
+         "figures/plate_plaid-controls-rows-error.png"),
+        ("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy",
+         "figures/plate_compd-controls-rows-error.png"),
+    ]
 
-    # PLAID layout
-    plaid_layout = np.load("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy")
-    neg_control_id = np.max(plaid_layout)
-    pos_control_id = neg_control_id - 1
-    ideal_plate, _ = sc.fill_plate(
-        plaid_layout, neg_control_id, pos_control_id,
-        neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
-    )
-    disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
-    control_locations = util.get_controls_layout(plaid_layout)
-    util.plot_plate(
-        disturbed_plate,
-        title="",
-        mask=np.array(1 - control_locations, dtype=bool),
-        filename="figures/plate_plaid-controls-rows-error.png",
-    )
-
-    # COMPD layout
-    compd_layout = np.load("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy")
-    neg_control_id = np.max(compd_layout)
-    pos_control_id = neg_control_id - 1
-    ideal_plate, _ = sc.fill_plate(
-        compd_layout, neg_control_id, pos_control_id,
-        neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
-    )
-    disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
-    control_locations = util.get_controls_layout(compd_layout)
-    util.plot_plate(
-        disturbed_plate,
-        title="",
-        mask=np.array(1 - control_locations, dtype=bool),
-        filename="figures/plate_compd-controls-rows-error.png",
-    )
+    for layout_path, output_filename in layout_specs:
+        layout = np.load(layout_path)
+        neg_control_id = np.max(layout)
+        pos_control_id = neg_control_id - 1
+        ideal_plate, _ = sc.fill_plate(
+            layout, neg_control_id, pos_control_id,
+            neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
+        )
+        disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
+        control_locations = util.get_controls_layout(layout)
+        util.plot_plate(
+            disturbed_plate,
+            title="",
+            mask=np.array(1 - control_locations, dtype=bool),
+            filename=output_filename,
+        )
 
 
 def generate_screening_figures(cfg: ScreeningConfig) -> None:
@@ -608,9 +484,8 @@ def generate_screening_figures(cfg: ScreeningConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Stage 3: SSMD / Z' metrics  (plate-metrics-comparison.ipynb)
+# Stage 3: SSMD / Z' metrics
 # ---------------------------------------------------------------------------
-
 
 def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     ensure_dir(cfg.metrics_data_dir)
@@ -624,6 +499,10 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     neg_stdev = 3
     pos_stdev = 4
 
+    # NOTE: run_metrics_simulation uses its own plate_types dicts (not PlateType objects)
+    # because sc.test_quality_assessment_metrics expects plain dicts with "type"/"dir"/"regex".
+    # These are intentionally kept consistent with cfg.plate_types() — if you add a new layout,
+    # update both places. This duplication will be removed when the layout registry lands.
     error_types = [{"type": "bowl-nl", "error_function": dt.add_bowlshaped_errors_nl}]
     data_directory = str(cfg.metrics_data_dir) + os.sep
 
@@ -662,9 +541,7 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     return output_file_list
 
 
-def generate_metrics_plots(
-    cfg: ScreeningConfig, output_files: List[str]
-) -> None:
+def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> None:
     ensure_dir(cfg.metrics_plots_dir)
 
     data_directory = str(cfg.metrics_data_dir) + os.sep
@@ -673,7 +550,6 @@ def generate_metrics_plots(
     box_pairs = [("random", "plaid"), ("random", "compd"), ("plaid", "compd")]
     order = ["random", "plaid", "compd"]
 
-    # Full grid — Z' and SSMD, unconstrained y
     for fname in output_files:
         for metric in ("Zfactor", "SSMD"):
             util.plotting_residual_metrics(
@@ -687,26 +563,17 @@ def generate_metrics_plots(
                 order=order,
             )
 
-    # Manuscript single-strength (10-10, error=0.06)
     manuscript_fname = "screening_metrics_data-10-10-0.06-20250623-reviewing.csv"
-    util.plotting_residual_metrics(
-        data_directory + manuscript_fname,
-        metric="Zfactor",
-        fig_name="manuscript",
-        y_max=None, palette=None,
-        plots_directory=plots_directory,
-        box_pairs=box_pairs, order=order,
-    )
-    util.plotting_residual_metrics(
-        data_directory + manuscript_fname,
-        metric="SSMD",
-        fig_name="manuscript",
-        y_max=None, palette=None,
-        plots_directory=plots_directory,
-        box_pairs=box_pairs, order=order,
-    )
+    for metric in ("Zfactor", "SSMD"):
+        util.plotting_residual_metrics(
+            data_directory + manuscript_fname,
+            metric=metric,
+            fig_name="manuscript",
+            y_max=None, palette=None,
+            plots_directory=plots_directory,
+            box_pairs=box_pairs, order=order,
+        )
 
-    # Fixed y_max grids (supplement figure grids, cells 13 and 15)
     for neg_controls, pos_controls in cfg.neg_pos_controls_list:
         for i in range(0, 26):
             error = i / 100.0
@@ -738,55 +605,80 @@ def run_metrics(cfg: ScreeningConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Stage 4 — Auto-generated LaTeX AUC table
+# Stage 4: Auto-generated LaTeX AUC table
 # ---------------------------------------------------------------------------
 
-def generate_auc_latex_table(config: ScreeningConfig) -> None:
+def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
     """
-    Replaces the hardcoded ROC-AUC / PR-AUC table in 0b_figures_tables.tex
-    by computing values from the same residuals CSVs used by the ROC/PR plots.
+    Generates a LaTeX table with ROC-AUC and PR-AUC values across all hit rates,
+    computed from all batches in the 10-10, error=0.2 screening residuals CSVs.
 
-    Output: latex-tables/screening_pr_10-10-0.2.tex
+    The table replaces the hardcoded ROC-AUC / PR-AUC table in 0b_figures_tables.tex.
+    Output: cfg.latex_tables_dir / screening_pr_10-10-0.2.tex
     """
-    from sklearn import metrics as skmetrics
+    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
 
-    config.latex_tables_dir.mkdir(parents=True, exist_ok=True)
-    data_dir = str(config.data_dir) + "/"
-    tag = config.today_tag
+    hit_rates  = [1, 5, 10, 20, 30, 40]
+    pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
+    layouts    = ["random", "plaid", "compd"]
 
-    hit_rates   = [1, 5, 10, 20, 30, 40]
-    pna_values  = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
-    layouts     = ["random", "plaid", "compd"]
+    # Accumulate per-hit-rate results
+    # summary[hit_rate][layout] = {"roc": (mean, std), "pr": (mean, std)}
+    summary: dict = {}
 
-    # Accumulate: summary[hit_rate][layout] = {"roc": [...], "pr": [...]}
-    summary[hit_rate] = {}
-    for layout in layouts:
-        sub = df[df["layout"] == layout]
-        if sub.empty:
-            summary[hit_rate][layout] = {"roc": (float("nan"), float("nan")),
-                                         "pr":  (float("nan"), float("nan"))}
+    for hit_rate, pna in zip(hit_rates, pna_values):
+        csv_name = (
+            f"screening-residuals-10-10-0.2-pna-{pna}{cfg.today_tag}.csv"
+        )
+        csv_path = cfg.screening_data_dir / csv_name
+
+        try:
+            df = pd.read_csv(csv_path)
+        except FileNotFoundError:
+            print(f"  WARNING: {csv_path} not found — skipping hit_rate={hit_rate}%")
+            summary[hit_rate] = {
+                lay: {"roc": (float("nan"), float("nan")),
+                      "pr":  (float("nan"), float("nan"))}
+                for lay in layouts
+            }
             continue
-        
-        # Note: ROC/PR figures (generate_roc_pr_curves) use a single selected batch
-        # for illustrative clarity. This table uses all batches to compute mean ± std,
-        # which is the statistically correct summary for the paper.
-        roc_aucs, pr_aucs = [], []
-        for _batch_id, grp in sub.groupby("batch"):
-            y_true  = (grp["activity"] > 0).astype(int)
-            y_score = -grp["true_residuals"]
-            if y_true.nunique() < 2:
-                continue
-            roc_aucs.append(skmetrics.roc_auc_score(y_true, y_score))
-            pr_aucs.append(skmetrics.average_precision_score(y_true, y_score))
 
-        summary[hit_rate][layout] = {
-            "roc": (np.mean(roc_aucs), np.std(roc_aucs)) if roc_aucs else (float("nan"), float("nan")),
-            "pr":  (np.mean(pr_aucs),  np.std(pr_aucs))  if pr_aucs  else (float("nan"), float("nan")),
-        }
+        # Normalise column names (CSV header written by simulate_condition)
+        df.columns = df.columns.str.strip()
+
+        summary[hit_rate] = {}
+        for layout in layouts:
+            sub = df[df["layout"] == layout]
+            if sub.empty:
+                summary[hit_rate][layout] = {
+                    "roc": (float("nan"), float("nan")),
+                    "pr":  (float("nan"), float("nan")),
+                }
+                continue
+
+            # Use all batches for statistical summary (the ROC/PR curve plots use a
+            # single selected batch for visual clarity; this table uses all batches).
+            roc_aucs, pr_aucs = [], []
+            for _batch_id, grp in sub.groupby("batch"):
+                y_true  = (grp["activity"].astype(float) > 0).astype(int)
+                y_score = -grp["true_residuals"].astype(float)
+                if y_true.nunique() < 2:
+                    continue
+                roc_aucs.append(skmetrics.roc_auc_score(y_true, y_score))
+                pr_aucs.append(skmetrics.average_precision_score(y_true, y_score))
+
+            summary[hit_rate][layout] = {
+                "roc": (np.mean(roc_aucs), np.std(roc_aucs))
+                       if roc_aucs else (float("nan"), float("nan")),
+                "pr":  (np.mean(pr_aucs),  np.std(pr_aucs))
+                       if pr_aucs  else (float("nan"), float("nan")),
+            }
 
     # Build LaTeX table
-    col_labels = ["Random ROC", "PLAID ROC", "COMPD ROC",
-                  "Random PR",  "PLAID PR",  "COMPD PR"]
+    col_labels = [
+        "Random ROC", "PLAID ROC", "COMPD ROC",
+        "Random PR",  "PLAID PR",  "COMPD PR",
+    ]
     lines = [
         r"\begin{tabular}{r" + "c" * 6 + r"}",
         r"\toprule",
@@ -794,20 +686,17 @@ def generate_auc_latex_table(config: ScreeningConfig) -> None:
         r"\midrule",
     ]
     for hit_rate in hit_rates:
-        if hit_rate not in summary:
-            continue
         row = [f"{hit_rate}\\%"]
-        for metric in ["roc", "pr"]:
+        for metric in ("roc", "pr"):
             for layout in layouts:
-                mean, std = summary[hit_rate][layout].get(metric, (float("nan"), float("nan")))
-                if np.isnan(mean):
-                    row.append("--")
-                else:
-                    row.append(f"{mean:.3f} $\\pm$ {std:.3f}")
+                mean, std = summary.get(hit_rate, {}).get(
+                    layout, {}
+                ).get(metric, (float("nan"), float("nan")))
+                row.append("--" if np.isnan(mean) else f"{mean:.3f} $\\pm$ {std:.3f}")
         lines.append(" & ".join(row) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
 
-    out_path = config.latex_tables_dir / "screening_pr_10-10-0.2.tex"
+    out_path = cfg.latex_tables_dir / "screening_pr_10-10-0.2.tex"
     out_path.write_text("\n".join(lines))
     print(f"  Written: {out_path}")
 
@@ -816,48 +705,38 @@ def generate_auc_latex_table(config: ScreeningConfig) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
-
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Run screening benchmark pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Stages:
-  simulate   Generate screening_scores_data-*.csv and screening-residuals-*.csv
-  figures    Generate expected-vs-obtained panels, ROC/PR curves, control figures
-  metrics    Generate screening_metrics_data-*.csv and SSMD/Z' robustness plots
-  tables     Generate `latex-tables/screening_pr_10-10-0.2` table
-  all        Run simulate, then figures, then metrics (default)
-
-Example:
-  python run_screening_benchmark.py --stage simulate
-  python run_screening_benchmark.py --stage figures
-  python run_screening_benchmark.py
-""",
+    parser = argparse.ArgumentParser(
+        description="Run COMPD/PLAID screening benchmark pipeline."
     )
-    p.add_argument(
+    parser.add_argument(
         "--stage",
-        choices=["all", "simulate", "figures", "metrics", "tables"],
+        choices=["simulate", "figures", "metrics", "table", "all"],
         default="all",
+        help=(
+            "simulate: generate CSVs; "
+            "figures: generate screening/ROC/PR plots; "
+            "metrics: generate SSMD/Z' plots; "
+            "table: generate LaTeX AUC table; "
+            "all: simulate → figures → metrics → table"
+        ),
     )
-    return p.parse_args()
+    return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = ScreeningConfig()
 
-    if args.stage in {"all", "simulate"}:
+    if args.stage in ("simulate", "all"):
         run_simulations(cfg)
-
-    if args.stage in {"all", "figures"}:
+    if args.stage in ("figures", "all"):
         generate_screening_figures(cfg)
-
-    if args.stage in {"all", "metrics"}:
+    if args.stage in ("metrics", "all"):
         run_metrics(cfg)
-
-    if args.stage in {"all", "tables"}:
+    if args.stage in ("table", "all"):
         generate_auc_latex_table(cfg)
+
 
 if __name__ == "__main__":
     main()

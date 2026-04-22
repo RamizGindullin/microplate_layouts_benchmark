@@ -1,5 +1,7 @@
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -14,9 +16,16 @@ from sklearn import metrics
 import statistics
 from moepy import lowess
 from scipy.interpolate import interp1d
+from benchmark_common import (
+    DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS,
+    DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE,
+    DOSE_RESPONSE_LAYOUT_LEGACY_ORDER,
+    SCREENING_LAYOUT_BOX_PAIRS,
+    SCREENING_LAYOUT_ORDER,
+)
 
-LAYOUT_DISPLAY_ORDER_BRE = ["Border", "Random", "Effective"]
-LAYOUT_DISPLAY_ORDER_ERB = ["Effective", "Random", "Border"]
+LAYOUT_DISPLAY_ORDER_BRE = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
+LAYOUT_DISPLAY_ORDER_ERB = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
 
 
 def _layout_box_pairs(order):
@@ -32,12 +41,11 @@ def _layout_box_pairs_by_replicate(order, replicates=(1, 2, 3)):
     ]
 
 
-# Backward-compatible aliases used throughout the legacy plotting code.
-order_bre = LAYOUT_DISPLAY_ORDER_BRE
-order_erb = LAYOUT_DISPLAY_ORDER_ERB
-box_pairs_bre = _layout_box_pairs(order_bre)
+order_bre = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
+order_erb = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
+box_pairs_bre = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS
 box_pairs_erb = _layout_box_pairs(order_erb)
-box_pairs_bre_3 = _layout_box_pairs_by_replicate(order_bre)
+box_pairs_bre_3 = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE
 box_pairs_erb_3 = _layout_box_pairs_by_replicate(order_erb)
 
 

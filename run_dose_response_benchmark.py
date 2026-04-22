@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List
@@ -35,14 +34,11 @@ import libraries.utilities as util
 from benchmark_common import (
     BOWL_ERROR_LEVELS,
     DOSE_RESPONSE_FIGURE_CASES,
-    DOSE_RESPONSE_LAYOUT_BOX_PAIRS,
-    DOSE_RESPONSE_LAYOUT_ORDER,
     RIGHT_HALF_ERROR_LEVELS,
     dose_response_plate_types,
     dilution_for,
     fig_dir_str,
 )
-from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
 
 
 # -----------------------------------------------------------------------

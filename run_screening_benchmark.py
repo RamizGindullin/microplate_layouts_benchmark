@@ -35,7 +35,6 @@ import libraries.utilities as util
 from benchmark_common import (
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
-    SCREENING_LAYOUT_SPECS,
     screening_metrics_plate_types,
     screening_plate_types,
 )
@@ -66,7 +65,6 @@ CONTROL_LAYOUT_FIGURE_CASES = [
     ("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy", "figures/plate_plaid-controls-rows-error.png"),
     ("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy", "figures/plate_compd-controls-rows-error.png"),
 ]
-from benchmark_common import SCREENING_LAYOUT_SPECS
 
 
 # ---------------------------------------------------------------------------

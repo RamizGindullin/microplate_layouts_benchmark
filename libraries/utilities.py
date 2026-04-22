@@ -431,7 +431,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order = order_bre, box_pairs = box_pairs_bre_3,fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER, box_pairs = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE,fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript.
     
     Args:
@@ -1189,7 +1189,7 @@ def plate_to_border_layout(layout, activity_layout, num_neg_controls, num_pos_co
 
 
 
-def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', fig_name=None, y_min=None, y_max=None, palette=None, plots_directory = '',box_pairs=box_pairs_bre, order=order_bre ):
+def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', fig_name=None, y_min=None, y_max=None, palette=None, plots_directory = '',box_pairs=SCREENING_LAYOUT_BOX_PAIRS, order=SCREENING_LAYOUT_ORDER ):
     print(screening_scores_data_filename)
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 

@@ -32,16 +32,12 @@ import libraries.disturbances as dt
 import libraries.normalization as nrm
 import libraries.dose_response as dr
 import libraries.utilities as util
+from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
 
 
 # -----------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------
-
-def _fig_dir(p: Path) -> str:
-    """Return a trailing-separator string path, as expected by util.plot_* functions."""
-    return str(p) + os.sep
-
 
 def _load_csv_triple(
     cfg: "DoseResponseConfig",
@@ -185,30 +181,12 @@ class DoseResponseConfig:
         self, compounds: int, concentrations: int, replicates: int
     ) -> List[Dict[str, Any]]:
         return [
-            {
-                "type": "COMPD",
-                "dir": "layouts/compounds_COMPD_layouts/",
-                "regex": (
-                    f"plate_layout_(.*){compounds}-{concentrations}-{replicates}"
-                    r"_(0*)(.+?).npy"
-                ),
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
-            {
-                "type": "PLAID",
-                "dir": "layouts/compounds_PLAID_layouts/",
-                "regex": (
-                    f"plate_layout_(.*){compounds}-{concentrations}-{replicates}"
-                    r"_(0*)(.+?).npy"
-                ),
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
-            {
-                "type": "RANDOM",
-                "dir": "layouts/compounds_manual_layouts/",
-                "regex": r"plate_layout_rand_(.+?).npy",
-                "error_correction": nrm.normalize_plate_lowess_2d,
-            },
+            spec.as_dict(
+                compounds=compounds,
+                concentrations=concentrations,
+                replicates=replicates,
+            )
+            for spec in DOSE_RESPONSE_LAYOUT_SPECS
         ]
 
 
@@ -228,16 +206,7 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
         for replicates in cfg.replicates_list:
             compounds = _compounds_for(concentrations, replicates)
 
-            if concentrations == 4:
-                dilution = 15
-            elif concentrations == 6:
-                dilution = 18
-            elif concentrations == 8:
-                dilution = 8
-            elif concentrations == 12:
-                dilution = 4
-            else:
-                raise ValueError(f"Unsupported concentrations value: {concentrations}")
+            dilution = dilution_for(concentrations)
 
             for scenario in cfg.scenarios:
                 today = cfg.date_tag
@@ -269,7 +238,7 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
 
 def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
     cfg.figures_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = _fig_dir(cfg.figures_dir)
+    fig_dir = fig_dir_str(cfg.figures_dir)
 
     # Bowl-shaped, no negatives in the fit
     for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
@@ -331,7 +300,7 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
 
 def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
     cfg.figures_dir.mkdir(parents=True, exist_ok=True)
-    fig_dir = _fig_dir(cfg.figures_dir)
+    fig_dir = fig_dir_str(cfg.figures_dir)
 
     # Scenarios: (id_text, error_nl values, fig_name_template)
     scenario_groups = [
@@ -475,14 +444,10 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
 
     for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in _CURVES_LAYOUTS:
-        if concentrations == 8:
-            dilution = 8
-        elif concentrations == 12:
-            dilution = 4
-        elif concentrations == 6:
-            dilution = 18
-        else:
-            dilution = 8  # fallback
+        try:
+            dilution = dilution_for(concentrations)
+        except ValueError:
+            dilution = 8  # fallback retained from original script
 
         params = [
             {

@@ -32,6 +32,7 @@ import libraries.disturbances as dt
 import libraries.normalization as nrm
 import libraries.screening as sc
 import libraries.utilities as util
+from benchmark_common import SCREENING_LAYOUT_SPECS
 
 
 # ---------------------------------------------------------------------------
@@ -82,23 +83,15 @@ class ScreeningConfig:
     def plate_types(self, neg_controls: int, pos_controls: int) -> List[PlateType]:
         return [
             PlateType(
-                type="random",
-                dir=str(self.layouts_root / "screening_RANDM_layouts" / ""),
-                regex=f"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-                error_correction=nrm.normalize_plate_lowess_2d,
-            ),
-            PlateType(
-                type="plaid",
-                dir=str(self.layouts_root / "screening_PLAID_layouts" / ""),
-                regex=f"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-                error_correction=nrm.normalize_plate_lowess_2d,
-            ),
-            PlateType(
-                type="compd",
-                dir=str(self.layouts_root / "screening_COMPD_layouts" / ""),
-                regex=f"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-                error_correction=nrm.normalize_plate_lowess_2d,
-            ),
+                type=spec.display_type,
+                dir=spec.layout_dir,
+                regex=spec.regex_template.format(
+                    neg_controls=neg_controls,
+                    pos_controls=pos_controls,
+                ),
+                error_correction=spec.error_correction,
+            )
+            for spec in SCREENING_LAYOUT_SPECS
         ]
 
     def error_types(self):
@@ -510,20 +503,14 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
         print(f"\nPlate {neg_controls}-{pos_controls}:")
         plate_types = [
             {
-                "type": "random",
-                "dir": "layouts/screening_RANDM_layouts/",
-                "regex": f"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-            },
-            {
-                "type": "plaid",
-                "dir": "layouts/screening_PLAID_layouts/",
-                "regex": f"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-            },
-            {
-                "type": "compd",
-                "dir": "layouts/screening_COMPD_layouts/",
-                "regex": f"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
-            },
+                "type": spec.display_type,
+                "dir": spec.layout_dir,
+                "regex": spec.regex_template.format(
+                    neg_controls=neg_controls,
+                    pos_controls=pos_controls,
+                ),
+            }
+            for spec in SCREENING_LAYOUT_SPECS
         ]
 
         for i in range(0, max_error):

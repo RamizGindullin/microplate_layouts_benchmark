@@ -75,7 +75,8 @@ CONTROL_LAYOUT_FIGURE_CASES = [
 
 @dataclass
 class PlateType:
-    type: str
+    type: str          # lowercase key written into "layout" CSV column
+    display_type: str  # canonical display label ("Random", "PLAID", "COMPD")
     dir: str
     regex: str
     error_correction: callable
@@ -118,6 +119,7 @@ class ScreeningConfig:
         return [
             PlateType(
                 type=plate_type["type"],
+                display_type=plate_type["display_type"],
                 dir=plate_type["dir"],
                 regex=plate_type["regex"],
                 error_correction=plate_type["error_correction"],
@@ -192,14 +194,14 @@ def simulate_condition(
         residuals_writer = csv.writer(residuals_f)
 
         scores_writer.writerow([
-            "batch", "layout", "error_type", "error", "lost_rows",
+            "batch", "layout", "display_type", "error_type", "error", "lost_rows",
             "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
             "Zfactor_expected", "SSMD_expected",
             "Zfactor_raw", "SSMD_raw",
             "Zfactor_norm", "SSMD_norm",
         ])
         residuals_writer.writerow([
-            "batch", "layout", "error_type", "error", "lost_rows",
+            "batch", "layout", "display_type", "error_type", "error", "lost_rows",
             "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
             "comp_id", "true_residuals", "expected_result",
             "obtained_result", "activity", "plate_id",
@@ -304,7 +306,7 @@ def simulate_condition(
                                 ) from exc
 
                             scores_writer.writerow([
-                                batch, plate_type.type, et["type"], error,
+                                batch, plate_type.type, plate_type.display_type, et["type"], error,
                                 lost_rows - 1,
                                 exp_neg_mean, exp_pos_mean,
                                 exp_neg_std, exp_pos_std,
@@ -348,6 +350,7 @@ def simulate_condition(
                             plate_residuals = np.vstack([
                                 np.full(res_size, batch),
                                 np.full(res_size, plate_type.type),
+                                np.full(res_size, plate_type.display_type),
                                 np.full(res_size, et["type"]),
                                 np.full(res_size, error),
                                 np.full(res_size, lost_rows - 1),
@@ -427,9 +430,6 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
                              str(cfg.screening_plots_dir), **kwargs)
         util.plot_pr_curves(str(residuals_path), "PR-" + fig_name,
                             str(cfg.screening_plots_dir), **kwargs)
-        util.roc_table_code(str(residuals_path))
-        print("--------------")
-        util.pr_table_code(str(residuals_path))
 
 
 def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
@@ -531,7 +531,7 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
                 order=order,
             )
 
-    manuscript_fname = "screening_metrics_data-10-10-0.06-20250623-reviewing.csv"
+    manuscript_fname = f"screening_metrics_data-10-10-0.06-{cfg.run_tag}-{cfg.metrics_id_text}.csv"
     for metric in ("Zfactor", "SSMD"):
         util.plotting_residual_metrics(
             data_directory + manuscript_fname,
@@ -547,7 +547,7 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
             error = i / 100.0
             fname = (
                 f"screening_metrics_data-{neg_controls}-{pos_controls}-"
-                f"{error}-20250623-reviewing.csv"
+                f"{error}-{cfg.run_tag}-{cfg.metrics_id_text}.csv"
             )
             util.plotting_residual_metrics(
                 data_directory + fname,
@@ -588,7 +588,7 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
 
     hit_rates  = [1, 5, 10, 20, 30, 40]
     pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
-    layouts    = ["random", "plaid", "compd"]
+    layouts    = SCREENING_LAYOUT_ORDER  # derived from registry
 
     # Accumulate per-hit-rate results
     # summary[hit_rate][layout] = {"roc": (mean, std), "pr": (mean, std)}
@@ -616,7 +616,7 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
 
         summary[hit_rate] = {}
         for layout in layouts:
-            sub = df[df["layout"] == layout]
+            sub = df[df["display_type"] == layout]
             if sub.empty:
                 summary[hit_rate][layout] = {
                     "roc": (float("nan"), float("nan")),
@@ -643,10 +643,10 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
             }
 
     # Build LaTeX table
-    col_labels = [
-        "Random ROC", "PLAID ROC", "COMPD ROC",
-        "Random PR",  "PLAID PR",  "COMPD PR",
-    ]
+    col_labels = (
+        [f"{lay} ROC" for lay in layouts]
+        + [f"{lay} PR"  for lay in layouts]
+    )
     lines = [
         r"\begin{tabular}{r" + "c" * 6 + r"}",
         r"\toprule",

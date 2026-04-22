@@ -1,7 +1,5 @@
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -17,36 +15,61 @@ import statistics
 from moepy import lowess
 from scipy.interpolate import interp1d
 from benchmark_common import (
+
+
+# ---------------------------------------------------------------------------
+# Layout classification (registry-driven)
+# ---------------------------------------------------------------------------
+
+def _classify_dose_response_layout_series(layout_series):
+    """Validate a pandas Series of dose-response display_type values from CSVs.
+
+    Raises ValueError on unrecognised values so CSV schema mismatches surface
+    immediately rather than silently corrupting plots.
+    """
+    known = {s.display_type for s in DOSE_RESPONSE_LAYOUT_SPECS}
+    def _map(v):
+        if v in known:
+            return v
+        raise ValueError(
+            f"Unrecognised dose-response layout {v!r}. "
+            f"Expected one of {sorted(known)}. "
+            "Check that benchmark scripts write display_type from "
+            "benchmark_common.DOSE_RESPONSE_LAYOUT_SPECS into result CSVs."
+        )
+    return layout_series.map(_map)
+
+
+def _classify_screening_layout_series(layout_series):
+    """Validate a pandas Series of screening display_type values from CSVs.
+
+    No longer called for active classification (CSVs carry a display_type column).
+    Retained as an early-warning validator: call on df["display_type"] after
+    pd.read_csv to surface any CSV schema mismatches immediately.
+    """
+    known = {s.display_type for s in SCREENING_LAYOUT_SPECS}
+    def _map(v):
+        if v in known:
+            return v
+        raise ValueError(
+            f"Unrecognised screening layout {v!r}. "
+            f"Expected one of {sorted(known)}. "
+            "Check that benchmark scripts write display_type from "
+            "benchmark_common.SCREENING_LAYOUT_SPECS into result CSVs."
+        )
+    return layout_series.map(_map)
+
+    DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
     DOSE_RESPONSE_LAYOUT_ORDER,
+    DOSE_RESPONSE_LAYOUT_SPECS,
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
-    classify_dose_response_layout_series,
-    dose_response_display_labels,
-    dose_response_legacy_box_pairs,
-    dose_response_legacy_box_pairs_by_replicate,
-    dose_response_legacy_labels,
+    SCREENING_LAYOUT_SPECS,
 )
 
 
 
-def _layout_box_pairs(order):
-    return [(order[i], order[j]) for i in range(len(order)) for j in range(i + 1, len(order))]
 
-
-def _layout_box_pairs_by_replicate(order, replicates=(1, 2, 3)):
-    return [
-        ((rep, order[i]), (rep, order[j]))
-        for rep in replicates
-        for i in range(len(order))
-        for j in range(i + 1, len(order))
-    ]
-
-
-order_bre = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
- = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-box_pairs_bre = dose_response_legacy_box_pairs()
- = _layout_box_pairs()
- = _layout_box_pairs_by_replicate()
 
 
 def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_order=None, plot='boxplot'):
@@ -56,20 +79,9 @@ def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_
     return annotator
 
 
-def _maybe_translate_dose_response_labels(df, column_name, hue_order):
-    if set(hue_order) == set(DOSE_RESPONSE_LAYOUT_ORDER):
-        df = df.copy()
-        df[column_name] = dose_response_display_labels(df[column_name].tolist())
-        translated_order = dose_response_display_labels(hue_order)
-        return df, translated_order
-    return df, hue_order
 
 
 
-def _dose_response_layout_labels_for_frame(hue_order):
-    if set(hue_order) == set(DOSE_RESPONSE_LAYOUT_ORDER):
-        return dose_response_display_labels(hue_order), True
-    return hue_order, False
 
 
 def _concat_dose_response_frames(data_1rep, data_2rep, data_3rep, value_name):
@@ -102,7 +114,7 @@ def _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep):
     frame3 = pd.DataFrame(data_3rep, columns=columns)
     frame3.insert(0, "replicates", 3)
     df = pd.concat([frame1, frame2, frame3], ignore_index=True)
-    df["layout"] = classify_dose_response_layout_series(df["layout"].astype(str).tolist())
+    df["layout"] = _classify_dose_response_layout_series(df["layout"])
     return df
 
 
@@ -116,7 +128,7 @@ def _prepare_dose_response_residuals_frame(residuals_1rep, residuals_2rep, resid
     frame3 = pd.DataFrame(residuals_3rep, columns=columns)
     frame3.insert(0, "replicates", 3)
     df = pd.concat([frame1, frame2, frame3], ignore_index=True)
-    df["layout"] = classify_dose_response_layout_series(df["layout"].astype(str).tolist())
+    df["layout"] = _classify_dose_response_layout_series(df["layout"])
     df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
     return df
 
@@ -129,7 +141,6 @@ def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=
     if filename:
         fig.savefig(filename,bbox_inches='tight')
     plt.close(fig)
-    plt.show()
     plt.close(fig)
     
     
@@ -286,7 +297,6 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     if filename:
         fig.savefig(filename)
     
-    plt.show()
     
     
 
@@ -298,9 +308,9 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         residuals_1rep, residuals_2rep, residuals_3rep
     )
     residuals_df = residuals_df.rename(columns={"replicates": "Replicate", "layout": "Layout type", "residuals": "Residuals"})
-    comparison_labels, _ = _dose_response_layout_labels_for_frame(hue_order)
+    comparison_labels = list(hue_order)
     if box_pairs is None:
-        box_pairs = dose_response_legacy_box_pairs_by_replicate(comparison_labels)
+        box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
 
     fig,ax = plt.subplots(figsize=(4,5))
     palette = ['#4c72b0', '#55a868', '#c44e52']
@@ -317,10 +327,8 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     )
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
     ax.set_ylim(top=y_max)
-    plt.tight_layout()
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
-    plt.show()
 
 def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3=None, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
@@ -366,9 +374,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
 
-    # replaced by classify_dose_response_layout_series
-    # replaced by classify_dose_response_layout_series
-    results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
+    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
     results_df = results_df.sort_values('layout', key = lambda s: s.apply(['Random','PLAID','COMPD'].index))
 #df = df.sort_values('A', key=lambda s: s.apply(['July', 'August', 'Sept'].index), ignore_index=True)
@@ -379,17 +385,8 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
         # * indicates p < 10−4, ** indicates p < 10−12, *** indicates p < 10−43.
         pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]] #[1e-64, "****"], 
 
-    box_pairs = [((2,"PLAID"), (2,"Random")),
-                 ((2,"COMPD"), (2,"PLAID")),
-                 ((3,"PLAID"), (3,"Random")),
-                 ((3,"COMPD"), (3,"PLAID")),
-                 ((1,"PLAID"), (1,"Random")),
-                 ((1,"COMPD"), (1,"PLAID")),
-                 ((2,"COMPD"), (2,"Random")),
-                 ((3,"COMPD"), (3,"Random")),
-                 ((1,"COMPD"), (1,"Random")),
-                ]
-    hue_order = ["Random", "PLAID", "COMPD"]    
+    box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
+    hue_order = DOSE_RESPONSE_LAYOUT_ORDER
 
     if y_max:
         ax.set_ylim(top = y_max)
@@ -423,7 +420,6 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 
     #plt.legend().set_title(None)
     fig.savefig(fig_dir+"dose-response-"+fig_type+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
     plt.close(fig)
     
     
@@ -445,17 +441,15 @@ def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='',
         .rename(columns={"replicates": "Replicate", "layout": "Layout type", "low_quality_curve": "Residuals"})
     )
     low_r2["Residuals"] = low_r2["Residuals"] * 100.0
-    comparison_labels, _ = _dose_response_layout_labels_for_frame(hue_order)
+    comparison_labels = list(hue_order)
 
     fig,ax = plt.subplots(figsize=(3.2,3.2))
     palette = ['#4c72b0', '#55a868', '#c44e52']
     sns.boxplot(data=low_r2, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
     ax.set_ylim(top=y_max)
-    plt.tight_layout()
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
-    plt.show()
 
 def create_latex_table(data, tex_filename, column_name="MSE"):
     # Open file
@@ -466,9 +460,7 @@ def create_latex_table(data, tex_filename, column_name="MSE"):
     results_df = results_df.sort_values("MSE")
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
-    # replaced by classify_dose_response_layout_series
-    # replaced by classify_dose_response_layout_series
-    results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
+    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
 
     results_df.d = pd.to_numeric(results_df.d, errors='coerce')
     results_df.fit_d = pd.to_numeric(results_df.fit_d, errors='coerce')
@@ -520,9 +512,7 @@ def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table
     results_df = results_df.sort_values(column_name)
     results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
     
-    # replaced by classify_dose_response_layout_series
-    # replaced by classify_dose_response_layout_series
-    results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
+    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
 #    plaid_description = results_df[results_df['layout']=='Effective'].describe()
  #   random_description = results_df[results_df['layout']=='Random'].describe()
@@ -531,7 +521,7 @@ def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table
 #    latex_f.write(" & Effective & Random & Border \\\\ ")
 #    latex_f.write("\n\\hline\n")
 
-    layouts = ["Random", "PLAID", "COMPD"]
+    layouts = [s.display_type for s in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)]
     
     latex_f.write("\\multirow{4}{*}{"+table_text+"}")
     
@@ -577,9 +567,7 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
     results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
     results_df = results_df[np.logical_not(np.isinf(results_df[column_name]))]
     
-    # replaced by classify_dose_response_layout_series
-    # replaced by classify_dose_response_layout_series
-    results_df.loc[(results_df['layout'] >= "plate_layout_20") & (results_df['layout'] != "Random") & (results_df['layout'] != "COMPD"), 'layout'] = "PLAID"
+    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
     layouts = ['Random','PLAID','COMPD']
     
@@ -711,7 +699,6 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 
     if fig_name:
         fig.savefig(plots_directory+"screening-"+metric+"-mse-"+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.show()
     plt.close(fig)
 
 
@@ -719,12 +706,11 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
 
     screening_residuals_df = pd.read_csv(residuals_filename)
+    screening_residuals_df['layout'] = screening_residuals_df['display_type']
 
     screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
 
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "random"), 'layout'] = "Random"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "plaid"), 'layout'] = "PLAID"
+    screening_residuals_df['layout'] = screening_residuals_df['display_type']
 
     screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
 
@@ -771,7 +757,6 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batc
     plt.yticks(fontsize=8)
     if fig_name:
         fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
-    plt.show()
     plt.close(fig)
     
 
@@ -781,12 +766,11 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batch
     #plt.rcParams['text.usetex'] = True
 
     screening_residuals_df = pd.read_csv(residuals_filename)
+    screening_residuals_df['layout'] = screening_residuals_df['display_type']
 
     screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
 
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "random"), 'layout'] = "Random"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "plaid"), 'layout'] = "PLAID"
+    screening_residuals_df['layout'] = screening_residuals_df['display_type']
 
     screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
 
@@ -834,7 +818,6 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batch
     plt.yticks(fontsize=8)
     if fig_name:
         fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
-    plt.show()
     plt.close(fig)
     
 
@@ -849,9 +832,7 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
 
     screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
 
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "random"), 'layout'] = "Random"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "compd"), 'layout'] = "COMPD"
-    screening_residuals_df.loc[(screening_residuals_df['layout'] == "plaid"), 'layout'] = "PLAID"
+    screening_residuals_df['layout'] = screening_residuals_df['display_type']
 
     neg_control_id = np.max(screening_residuals_df.comp_id)
     pos_control_id = neg_control_id -1 
@@ -877,7 +858,6 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-expected.png",bbox_inches='tight',dpi=1200)
-    plt.show()
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -894,7 +874,6 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-plaid.png",bbox_inches='tight',dpi=1200)
-    plt.show()
     plt.close(fig)
 
 
@@ -912,7 +891,6 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-random.png",bbox_inches='tight',dpi=1200)
-    plt.show()
     plt.close(fig)
 
 
@@ -929,7 +907,6 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_valu
     plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
     if fig_name:
         fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-compd.png",bbox_inches='tight',dpi=1200)
-    plt.show()
     plt.close(fig)
         
 
@@ -1004,7 +981,6 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     
     if (filename):
         fig.savefig(filename)
-    plt.show()
     plt.close(fig)
         
     unstack_adjusted_df = y_adjusted[["Rows","Columns","Intensity"]].copy()

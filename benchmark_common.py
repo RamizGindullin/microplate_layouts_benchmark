@@ -59,7 +59,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
     ),
     LayoutSpec(
         key="random",
-        display_type="RANDOM",
+        display_type="Random",
         layout_dir="layouts/compounds_manual_layouts/",
         regex_template=r"plate_layout_rand_(.+?).npy",
     ),
@@ -69,19 +69,19 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
 SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
     LayoutSpec(
         key="random",
-        display_type="random",
+        display_type="Random",
         layout_dir="layouts/screening_RANDM_layouts/",
         regex_template=r"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
     ),
     LayoutSpec(
         key="plaid",
-        display_type="plaid",
+        display_type="PLAID",
         layout_dir="layouts/screening_PLAID_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
     ),
     LayoutSpec(
         key="compd",
-        display_type="compd",
+        display_type="COMPD",
         layout_dir="layouts/screening_COMPD_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
     ),
@@ -99,6 +99,7 @@ def screening_plate_types(neg_controls: int, pos_controls: int):
     return [
         {
             "type": spec.display_type,
+            "display_type": spec.display_type,
             "dir": spec.layout_dir,
             "regex": spec.regex_template.format(
                 neg_controls=neg_controls,
@@ -114,6 +115,7 @@ def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
     return [
         {
             "type": spec.display_type,
+            "display_type": spec.display_type,
             "dir": spec.layout_dir,
             "regex": spec.regex_template.format(
                 neg_controls=neg_controls,
@@ -126,6 +128,12 @@ def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
 DOSE_RESPONSE_LAYOUT_ORDER = [spec.display_type for spec in DOSE_RESPONSE_LAYOUT_SPECS]
 DOSE_RESPONSE_LAYOUT_BOX_PAIRS = [
     (DOSE_RESPONSE_LAYOUT_ORDER[i], DOSE_RESPONSE_LAYOUT_ORDER[j])
+    for i in range(len(DOSE_RESPONSE_LAYOUT_ORDER))
+    for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_ORDER))
+]
+DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE = [
+    ((rep, DOSE_RESPONSE_LAYOUT_ORDER[i]), (rep, DOSE_RESPONSE_LAYOUT_ORDER[j]))
+    for rep in (1, 2, 3)
     for i in range(len(DOSE_RESPONSE_LAYOUT_ORDER))
     for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_ORDER))
 ]
@@ -145,81 +153,19 @@ DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
 BOWL_ERROR_LEVELS = (0.055, 0.085)
 RIGHT_HALF_ERROR_LEVELS = (0.2, 0.4)
 
-DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY = {
-    "COMPD": "Border",
-    "PLAID": "Random",
-    "RANDOM": "Effective",
-}
-DOSE_RESPONSE_LAYOUT_LEGACY_ORDER = [
-    DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY[name]
-    for name in DOSE_RESPONSE_LAYOUT_ORDER
-]
-DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS = [
-    (DOSE_RESPONSE_LAYOUT_LEGACY_ORDER[i], DOSE_RESPONSE_LAYOUT_LEGACY_ORDER[j])
-    for i in range(len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-    for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-]
-DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE = [
-    ((rep, DOSE_RESPONSE_LAYOUT_LEGACY_ORDER[i]), (rep, DOSE_RESPONSE_LAYOUT_LEGACY_ORDER[j]))
-    for rep in (1, 2, 3)
-    for i in range(len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-    for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-]
+def classify_layout_by_key(key: str, specs) -> str:
+    """Return display_type for a layout key. Raises ValueError for unknown keys."""
+    mapping = {s.key: s.display_type for s in specs}
+    if key not in mapping:
+        raise ValueError(f"Unknown layout key {key!r}. Known: {sorted(mapping)}")
+    return mapping[key]
 
-
-def dose_response_legacy_label(display_name: str) -> str:
-    return DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY[display_name]
-
-
-def dose_response_legacy_labels(display_names):
-    return [dose_response_legacy_label(name) for name in display_names]
-
-
-def dose_response_legacy_box_pairs(display_names=None):
-    labels = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER if display_names is None else dose_response_legacy_labels(display_names)
-    return [
-        (labels[i], labels[j])
-        for i in range(len(labels))
-        for j in range(i + 1, len(labels))
-    ]
-
-
-def dose_response_legacy_box_pairs_by_replicate(display_names=None, replicates=(1, 2, 3)):
-    labels = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER if display_names is None else dose_response_legacy_labels(display_names)
-    return [
-        ((rep, labels[i]), (rep, labels[j]))
-        for rep in replicates
-        for i in range(len(labels))
-        for j in range(i + 1, len(labels))
-    ]
-
-DOSE_RESPONSE_LAYOUT_LEGACY_TO_DISPLAY = {v: k for k, v in DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY.items()}
-
-
-def dose_response_display_label(legacy_name: str) -> str:
-    return DOSE_RESPONSE_LAYOUT_LEGACY_TO_DISPLAY[legacy_name]
-
-
-def dose_response_display_labels(legacy_names):
-    return [dose_response_display_label(name) for name in legacy_names]
 
 def validate_layout_registry_consistency():
-    """Validate registry alignment."""
-    expected = {'compd', 'plaid', 'random'}
-    dr_keys = {spec.key for spec in DOSE_RESPONSE_LAYOUT_SPECS}
-    sr_keys = {spec.key for spec in SCREENING_LAYOUT_SPECS}
-    assert dr_keys == expected == sr_keys
-    print("✅ Layout registries aligned")
-
-
-
-def classify_dose_response_layout_name(layout_name: str) -> str:
-    if layout_name.startswith("plate_layout_rand"):
-        return "Random"
-    if layout_name.startswith("plate_layout_"):
-        return "COMPD"
-    return layout_name
-
-
-def classify_dose_response_layout_series(layout_values):
-    return [classify_dose_response_layout_name(value) for value in layout_values]
+    """Assert that dose-response and screening registries cover the same keys."""
+    expected = {"compd", "plaid", "random"}
+    dr_keys = {s.key for s in DOSE_RESPONSE_LAYOUT_SPECS}
+    sr_keys = {s.key for s in SCREENING_LAYOUT_SPECS}
+    assert dr_keys == expected, f"Dose-response keys mismatch: {dr_keys}"
+    assert sr_keys == expected, f"Screening keys mismatch: {sr_keys}"
+    print("Layout registries are consistent.")

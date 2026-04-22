@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from moepy import lowess, eda
+from moepy import lowess
 import libraries.utilities as util
 from scipy.interpolate import interp1d
 from sklearn.linear_model import LinearRegression

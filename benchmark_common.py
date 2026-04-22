@@ -122,3 +122,25 @@ def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
         }
         for spec in SCREENING_LAYOUT_SPECS
     ]
+
+DOSE_RESPONSE_LAYOUT_ORDER = [spec.display_type for spec in DOSE_RESPONSE_LAYOUT_SPECS]
+DOSE_RESPONSE_LAYOUT_BOX_PAIRS = [
+    (DOSE_RESPONSE_LAYOUT_ORDER[i], DOSE_RESPONSE_LAYOUT_ORDER[j])
+    for i in range(len(DOSE_RESPONSE_LAYOUT_ORDER))
+    for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_ORDER))
+]
+
+
+def dose_response_plate_types(compounds: int, concentrations: int, replicates: int):
+    return [
+        spec.as_dict(
+            compounds=compounds,
+            concentrations=concentrations,
+            replicates=replicates,
+        )
+        for spec in DOSE_RESPONSE_LAYOUT_SPECS
+    ]
+
+DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
+BOWL_ERROR_LEVELS = (0.055, 0.085)
+RIGHT_HALF_ERROR_LEVELS = (0.2, 0.4)

@@ -1,7 +1,5 @@
 import matplotlib
 matplotlib.use("Agg")
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -41,6 +39,13 @@ box_pairs_bre = _layout_box_pairs(order_bre)
 box_pairs_erb = _layout_box_pairs(order_erb)
 box_pairs_bre_3 = _layout_box_pairs_by_replicate(order_bre)
 box_pairs_erb_3 = _layout_box_pairs_by_replicate(order_erb)
+
+
+def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_order=None, plot='boxplot'):
+    annotator = Annotator(ax, pairs, data=data, x=x, y=y, order=order, hue=hue, hue_order=hue_order, plot=plot)
+    annotator.configure(test='Mann-Whitney', text_format='star', loc='outside', line_width=1)
+    annotator.apply_and_annotate()
+    return annotator
 
 
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):

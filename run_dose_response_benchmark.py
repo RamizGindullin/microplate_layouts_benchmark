@@ -32,11 +32,16 @@ import libraries.disturbances as dt
 import libraries.normalization as nrm
 import libraries.dose_response as dr
 import libraries.utilities as util
-from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
-
-DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
-BOWL_ERROR_LEVELS = (0.055, 0.085)
-RIGHT_HALF_ERROR_LEVELS = (0.2, 0.4)
+from benchmark_common import (
+    BOWL_ERROR_LEVELS,
+    DOSE_RESPONSE_FIGURE_CASES,
+    DOSE_RESPONSE_LAYOUT_BOX_PAIRS,
+    DOSE_RESPONSE_LAYOUT_ORDER,
+    RIGHT_HALF_ERROR_LEVELS,
+    dose_response_plate_types,
+    dilution_for,
+    fig_dir_str,
+)
 from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
 
 
@@ -185,14 +190,7 @@ class DoseResponseConfig:
     def plate_types_location(
         self, compounds: int, concentrations: int, replicates: int
     ) -> List[Dict[str, Any]]:
-        return [
-            spec.as_dict(
-                compounds=compounds,
-                concentrations=concentrations,
-                replicates=replicates,
-            )
-            for spec in DOSE_RESPONSE_LAYOUT_SPECS
-        ]
+        return dose_response_plate_types(compounds, concentrations, replicates)
 
 
 # -----------------------------------------------------------------------
@@ -235,6 +233,13 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
                     id_text=scenario.id_text,
                     data_directory=str(cfg.data_dir) + os.sep,
                 )
+
+
+IC50_DMAX_R2_SCENARIO_GROUPS = [
+    ("curve_info-new-reg", BOWL_ERROR_LEVELS, lambda doses, error_nl: f"bowl-{error_nl}-{doses}-concentrations"),
+    ("bowl-neg-control-new-reg", BOWL_ERROR_LEVELS, lambda doses, error_nl: f"bowl-neg-controls-{error_nl}-{doses}-concentrations"),
+    ("right-half-neg-control-log-new-reg", RIGHT_HALF_ERROR_LEVELS, lambda doses, error_nl: f"half-columns-neg-controls-{error_nl}-{doses}-concentrations"),
+]
 
 
 # -----------------------------------------------------------------------

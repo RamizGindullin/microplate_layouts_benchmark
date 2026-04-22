@@ -34,6 +34,11 @@ import libraries.dose_response as dr
 import libraries.utilities as util
 from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
 
+DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
+BOWL_ERROR_LEVELS = (0.055, 0.085)
+RIGHT_HALF_ERROR_LEVELS = (0.2, 0.4)
+from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dilution_for, fig_dir_str
+
 
 # -----------------------------------------------------------------------
 # Helpers
@@ -241,8 +246,8 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
     fig_dir = fig_dir_str(cfg.figures_dir)
 
     # Bowl-shaped, no negatives in the fit
-    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
-        for error_nl in (0.055, 0.085):
+    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+        for error_nl in BOWL_ERROR_LEVELS:
             r1, r2, r3 = _load_csv_triple(
                 cfg, "residuals", doses, dilution, error_nl, "curve_info-new-reg"
             )
@@ -255,8 +260,8 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
             )
 
     # Bowl-shaped, with 4 negatives in the fit
-    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
-        for error_nl in (0.055, 0.085):
+    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+        for error_nl in BOWL_ERROR_LEVELS:
             r1, r2, r3 = _load_csv_triple(
                 cfg, "residuals", doses, dilution, error_nl, "bowl-neg-control-new-reg"
             )
@@ -269,8 +274,8 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
             )
 
     # Column-wise right-half effects
-    for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
-        for error_nl in (0.2, 0.4):
+    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+        for error_nl in RIGHT_HALF_ERROR_LEVELS:
             r1, r2, r3 = _load_csv_triple(
                 cfg, "residuals", doses, dilution, error_nl,
                 "right-half-neg-control-log-new-reg"
@@ -325,7 +330,7 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
     ]
 
     for id_text, error_nls, fig_name_fn, r2_fig_name_fn in scenario_groups:
-        for doses, dilution in [(6, 18), (8, 8), (12, 4)]:
+        for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
             for error_nl in error_nls:
                 rel_1, rel_2, rel_3 = _load_csv_triple(
                     cfg, "relative_ic50_data", doses, dilution, error_nl, id_text

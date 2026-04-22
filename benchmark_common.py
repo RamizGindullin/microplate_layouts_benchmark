@@ -86,3 +86,39 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
     ),
 ]
+
+SCREENING_LAYOUT_ORDER = [spec.display_type for spec in SCREENING_LAYOUT_SPECS]
+SCREENING_LAYOUT_BOX_PAIRS = [
+    (SCREENING_LAYOUT_ORDER[i], SCREENING_LAYOUT_ORDER[j])
+    for i in range(len(SCREENING_LAYOUT_ORDER))
+    for j in range(i + 1, len(SCREENING_LAYOUT_ORDER))
+]
+
+
+def screening_plate_types(neg_controls: int, pos_controls: int):
+    return [
+        {
+            "type": spec.display_type,
+            "dir": spec.layout_dir,
+            "regex": spec.regex_template.format(
+                neg_controls=neg_controls,
+                pos_controls=pos_controls,
+            ),
+            "error_correction": spec.error_correction,
+        }
+        for spec in SCREENING_LAYOUT_SPECS
+    ]
+
+
+def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
+    return [
+        {
+            "type": spec.display_type,
+            "dir": spec.layout_dir,
+            "regex": spec.regex_template.format(
+                neg_controls=neg_controls,
+                pos_controls=pos_controls,
+            ),
+        }
+        for spec in SCREENING_LAYOUT_SPECS
+    ]

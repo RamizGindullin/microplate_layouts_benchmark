@@ -32,6 +32,40 @@ import libraries.disturbances as dt
 import libraries.normalization as nrm
 import libraries.screening as sc
 import libraries.utilities as util
+from benchmark_common import (
+    SCREENING_LAYOUT_BOX_PAIRS,
+    SCREENING_LAYOUT_ORDER,
+    SCREENING_LAYOUT_SPECS,
+    screening_metrics_plate_types,
+    screening_plate_types,
+)
+
+SCREENING_PANEL_CASES = [
+    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv", 450),
+    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", 450),
+    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.03-pna-0.99{today_tag}.csv", 450),
+]
+
+SCREENING_ROC_PR_CASES = [
+    ("screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", "10-10-0.2-1.png", 6),
+    ("screening-residuals-10-10-0.2-pna-0.95{today_tag}.csv", "10-10-0.2-5.png", 9),
+    ("screening-residuals-10-10-0.2-pna-0.9{today_tag}.csv",  "10-10-0.2-10.png", 0),
+    ("screening-residuals-10-10-0.2-pna-0.8{today_tag}.csv",  "10-10-0.2-20.png", 2),
+    ("screening-residuals-10-10-0.2-pna-0.7{today_tag}.csv",  "10-10-0.2-30.png", 6),
+    ("screening-residuals-10-10-0.2-pna-0.6{today_tag}.csv",  "10-10-0.2-40.png", None),
+    ("screening-residuals-8-8-0.1-pna-0.99{today_tag}.csv",   "8-8-0.1-1.png", None),
+    ("screening-residuals-8-8-0.1-pna-0.95{today_tag}.csv",   "8-8-0.1-5.png", 1),
+    ("screening-residuals-8-8-0.1-pna-0.9{today_tag}.csv",    "8-8-0.1-10.png", 6),
+    ("screening-residuals-8-8-0.1-pna-0.8{today_tag}.csv",    "8-8-0.1-20.png", 6),
+    ("screening-residuals-8-8-0.1-pna-0.7{today_tag}.csv",    "8-8-0.1-30.png", 6),
+    ("screening-residuals-8-8-0.1-pna-0.6{today_tag}.csv",    "8-8-0.1-40.png", 3),
+]
+
+CONTROL_LAYOUT_FIGURE_CASES = [
+    ("layouts/screening_RANDM_layouts/plate_layout_rand_10-10_02.npy", "figures/plate_random-controls-rows-error.png"),
+    ("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy", "figures/plate_plaid-controls-rows-error.png"),
+    ("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy", "figures/plate_compd-controls-rows-error.png"),
+]
 from benchmark_common import SCREENING_LAYOUT_SPECS
 
 
@@ -83,15 +117,12 @@ class ScreeningConfig:
     def plate_types(self, neg_controls: int, pos_controls: int) -> List[PlateType]:
         return [
             PlateType(
-                type=spec.display_type,
-                dir=spec.layout_dir,
-                regex=spec.regex_template.format(
-                    neg_controls=neg_controls,
-                    pos_controls=pos_controls,
-                ),
-                error_correction=spec.error_correction,
+                type=plate_type["type"],
+                dir=plate_type["dir"],
+                regex=plate_type["regex"],
+                error_correction=plate_type["error_correction"],
             )
-            for spec in SCREENING_LAYOUT_SPECS
+            for plate_type in screening_plate_types(neg_controls, pos_controls)
         ]
 
     def error_types(self):
@@ -373,20 +404,8 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
     # the "0.06" figure uses simulation error=0.1 because visually that produces
     # the "mild" appearance described in the paper caption.
     # DO NOT change the CSV filenames without regenerating all screening data.
-    cases = [
-        # (fig_name,                   residuals_csv,                                     max_value)
-        # Manuscript Fig 3 a–c: mild bowl-shaped effect, labelled "0.06"
-        ("0.06-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.1-pna-0.99{cfg.today_tag}.csv",  450),
-        # Supplement Fig 20:   moderate bowl-shaped effect, labelled "0.08"
-        ("0.08-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv",  450),
-        # Supplement (not included in current version): very mild effect
-        ("0.03-10-10-0.99-stdev-3-4",  f"screening-residuals-10-10-0.03-pna-0.99{cfg.today_tag}.csv", 450),
-        # NOTE: a "0.05" case (error=0.05) that appeared in a notebook cell marked
-        # "Supplement Figure not included" has been removed. error=0.05 is not in
-        # error_strength_list and no CSV for it is produced by run_simulations.
-    ]
-
-    for fig_name, residuals_file, max_value in cases:
+    for fig_name, residuals_file_template, max_value in SCREENING_PANEL_CASES:
+        residuals_file = residuals_file_template.format(today_tag=cfg.today_tag)
         residuals_path = cfg.screening_data_dir / residuals_file
         util.plot_screening_plates(
             str(residuals_path),
@@ -400,27 +419,8 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
     """ROC / PR curves. Also prints roc_table_code / pr_table_code to stdout."""
     ensure_dir(cfg.screening_plots_dir)
 
-    cases = [
-        # (residuals_csv,                                              fig_name,        batch)
-        # Manuscript Fig 3f
-        (f"screening-residuals-10-10-0.2-pna-0.99{cfg.today_tag}.csv", "10-10-0.2-1.png",  6),
-        # Manuscript Fig 3g
-        (f"screening-residuals-10-10-0.2-pna-0.95{cfg.today_tag}.csv", "10-10-0.2-5.png",  9),
-        # Supplement Fig 23a–d
-        (f"screening-residuals-10-10-0.2-pna-0.9{cfg.today_tag}.csv",  "10-10-0.2-10.png", 0),
-        (f"screening-residuals-10-10-0.2-pna-0.8{cfg.today_tag}.csv",  "10-10-0.2-20.png", 2),
-        (f"screening-residuals-10-10-0.2-pna-0.7{cfg.today_tag}.csv",  "10-10-0.2-30.png", 6),
-        (f"screening-residuals-10-10-0.2-pna-0.6{cfg.today_tag}.csv",  "10-10-0.2-40.png", None),
-        # Supplement Fig 24a–f  (8,8 controls)
-        (f"screening-residuals-8-8-0.1-pna-0.99{cfg.today_tag}.csv",   "8-8-0.1-1.png",   None),
-        (f"screening-residuals-8-8-0.1-pna-0.95{cfg.today_tag}.csv",   "8-8-0.1-5.png",   1),
-        (f"screening-residuals-8-8-0.1-pna-0.9{cfg.today_tag}.csv",    "8-8-0.1-10.png",  6),
-        (f"screening-residuals-8-8-0.1-pna-0.8{cfg.today_tag}.csv",    "8-8-0.1-20.png",  6),
-        (f"screening-residuals-8-8-0.1-pna-0.7{cfg.today_tag}.csv",    "8-8-0.1-30.png",  6),
-        (f"screening-residuals-8-8-0.1-pna-0.6{cfg.today_tag}.csv",    "8-8-0.1-40.png",  3),
-    ]
-
-    for residuals_file, fig_name, batch in cases:
+    for residuals_file_template, fig_name, batch in SCREENING_ROC_PR_CASES:
+        residuals_file = residuals_file_template.format(today_tag=cfg.today_tag)
         residuals_path = cfg.screening_data_dir / residuals_file
         kwargs = {} if batch is None else {"batch": batch}
         util.plot_roc_curves(str(residuals_path), "ROC-" + fig_name,
@@ -443,16 +443,7 @@ def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
 
     np.random.seed(42)
 
-    layout_specs = [
-        ("layouts/screening_RANDM_layouts/plate_layout_rand_10-10_02.npy",
-         "figures/plate_random-controls-rows-error.png"),
-        ("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy",
-         "figures/plate_plaid-controls-rows-error.png"),
-        ("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy",
-         "figures/plate_compd-controls-rows-error.png"),
-    ]
-
-    for layout_path, output_filename in layout_specs:
+    for layout_path, output_filename in CONTROL_LAYOUT_FIGURE_CASES:
         layout = np.load(layout_path)
         neg_control_id = np.max(layout)
         pos_control_id = neg_control_id - 1
@@ -501,17 +492,7 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
 
     for neg_controls, pos_controls in cfg.neg_pos_controls_list:
         print(f"\nPlate {neg_controls}-{pos_controls}:")
-        plate_types = [
-            {
-                "type": spec.display_type,
-                "dir": spec.layout_dir,
-                "regex": spec.regex_template.format(
-                    neg_controls=neg_controls,
-                    pos_controls=pos_controls,
-                ),
-            }
-            for spec in SCREENING_LAYOUT_SPECS
-        ]
+        plate_types = screening_metrics_plate_types(neg_controls, pos_controls)
 
         for i in range(0, max_error):
             error = i / 100.0
@@ -534,8 +515,8 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
     data_directory = str(cfg.metrics_data_dir) + os.sep
     plots_directory = str(cfg.metrics_plots_dir) + os.sep
 
-    box_pairs = [("random", "plaid"), ("random", "compd"), ("plaid", "compd")]
-    order = ["random", "plaid", "compd"]
+    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
+    order = SCREENING_LAYOUT_ORDER
 
     for fname in output_files:
         for metric in ("Zfactor", "SSMD"):

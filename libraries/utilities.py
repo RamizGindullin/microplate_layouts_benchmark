@@ -17,15 +17,15 @@ import statistics
 from moepy import lowess
 from scipy.interpolate import interp1d
 from benchmark_common import (
-    DOSE_RESPONSE_LAYOUT_LEGACY_ORDER,
+    DOSE_RESPONSE_LAYOUT_ORDER,
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
+    dose_response_display_labels,
     dose_response_legacy_box_pairs,
     dose_response_legacy_box_pairs_by_replicate,
+    dose_response_legacy_labels,
 )
 
-LAYOUT_DISPLAY_ORDER_BRE = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
-LAYOUT_DISPLAY_ORDER_ERB = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
 
 
 def _layout_box_pairs(order):
@@ -42,11 +42,10 @@ def _layout_box_pairs_by_replicate(order, replicates=(1, 2, 3)):
 
 
 order_bre = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
-order_erb = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
+ = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
 box_pairs_bre = dose_response_legacy_box_pairs()
-box_pairs_erb = _layout_box_pairs(order_erb)
-box_pairs_bre_3 = dose_response_legacy_box_pairs_by_replicate()
-box_pairs_erb_3 = _layout_box_pairs_by_replicate(order_erb)
+ = _layout_box_pairs()
+ = _layout_box_pairs_by_replicate()
 
 
 def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_order=None, plot='boxplot'):
@@ -54,6 +53,15 @@ def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_
     annotator.configure(test='Mann-Whitney', text_format='star', loc='outside', line_width=1)
     annotator.apply_and_annotate()
     return annotator
+
+
+def _maybe_translate_dose_response_labels(df, column_name, hue_order):
+    if set(hue_order) == set(DOSE_RESPONSE_LAYOUT_ORDER):
+        df = df.copy()
+        df[column_name] = dose_response_display_labels(df[column_name].tolist())
+        translated_order = dose_response_display_labels(hue_order)
+        return df, translated_order
+    return df, hue_order
 
 
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
@@ -431,7 +439,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER, box_pairs = None, fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript.
     
     Args:
@@ -513,7 +521,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
   
 
     
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', fig_type='', plot_mse = True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3 = None, pvalue_thresholds=None, hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3=None, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -623,7 +631,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     
     
     
-def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
+def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """
     Plotting the percentage of low-quality curves for dose-response simulations as in the manuscript.
     
@@ -870,6 +878,8 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
     
     
 def plotting_ssmd_scores(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
+    order = SCREENING_LAYOUT_ORDER
+    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 
     ## No rows lost!
@@ -949,6 +959,8 @@ def plotting_ssmd_scores(screening_scores_data_filename, fig_name, y_min=None, y
     
     
 def plotting_z_scores(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
+    order = SCREENING_LAYOUT_ORDER
+    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 
     ## No rows lost!
@@ -1020,6 +1032,8 @@ def plotting_z_scores(screening_scores_data_filename, fig_name, y_min=None, y_ma
     
     
 def plotting_ssmd_scores_norm(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
+    order = SCREENING_LAYOUT_ORDER
+    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 
     ## No rows lost!
@@ -1074,6 +1088,8 @@ def plotting_ssmd_scores_norm(screening_scores_data_filename, fig_name, y_min=No
 
     
 def plotting_z_scores_norm(screening_scores_data_filename, fig_name, y_min=None, y_max=None, fig_dir=''):
+    order = SCREENING_LAYOUT_ORDER
+    box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 
     ## No rows lost!
@@ -1189,7 +1205,7 @@ def plate_to_border_layout(layout, activity_layout, num_neg_controls, num_pos_co
 
 
 
-def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', fig_name=None, y_min=None, y_max=None, palette=None, plots_directory = '',box_pairs=SCREENING_LAYOUT_BOX_PAIRS, order=SCREENING_LAYOUT_ORDER ):
+def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', fig_name=None, y_min=None, y_max=None, palette=None, plots_directory='', box_pairs=SCREENING_LAYOUT_BOX_PAIRS, order=SCREENING_LAYOUT_ORDER):
     print(screening_scores_data_filename)
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
 

@@ -192,3 +192,21 @@ def dose_response_legacy_box_pairs_by_replicate(display_names=None, replicates=(
         for i in range(len(labels))
         for j in range(i + 1, len(labels))
     ]
+
+DOSE_RESPONSE_LAYOUT_LEGACY_TO_DISPLAY = {v: k for k, v in DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY.items()}
+
+
+def dose_response_display_label(legacy_name: str) -> str:
+    return DOSE_RESPONSE_LAYOUT_LEGACY_TO_DISPLAY[legacy_name]
+
+
+def dose_response_display_labels(legacy_names):
+    return [dose_response_display_label(name) for name in legacy_names]
+
+def validate_layout_registry_consistency():
+    """Validate registry alignment."""
+    expected = {'compd', 'plaid', 'random'}
+    dr_keys = {spec.key for spec in DOSE_RESPONSE_LAYOUT_SPECS}
+    sr_keys = {spec.key for spec in SCREENING_LAYOUT_SPECS}
+    assert dr_keys == expected == sr_keys
+    print("✅ Layout registries aligned")

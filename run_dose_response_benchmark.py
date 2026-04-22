@@ -38,8 +38,10 @@ from benchmark_common import (
     dose_response_plate_types,
     dilution_for,
     fig_dir_str,
+    validate_layout_registry_consistency,
 )
 
+validate_layout_registry_consistency()
 
 # -----------------------------------------------------------------------
 # Helpers

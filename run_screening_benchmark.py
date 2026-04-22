@@ -37,7 +37,9 @@ from benchmark_common import (
     SCREENING_LAYOUT_ORDER,
     screening_metrics_plate_types,
     screening_plate_types,
+    validate_layout_registry_consistency,
 )
+validate_layout_registry_consistency()
 
 SCREENING_PANEL_CASES = [
     ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv", 450),

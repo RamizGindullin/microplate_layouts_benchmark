@@ -17,11 +17,11 @@ import statistics
 from moepy import lowess
 from scipy.interpolate import interp1d
 from benchmark_common import (
-    DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS,
-    DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE,
     DOSE_RESPONSE_LAYOUT_LEGACY_ORDER,
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
+    dose_response_legacy_box_pairs,
+    dose_response_legacy_box_pairs_by_replicate,
 )
 
 LAYOUT_DISPLAY_ORDER_BRE = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
@@ -43,9 +43,9 @@ def _layout_box_pairs_by_replicate(order, replicates=(1, 2, 3)):
 
 order_bre = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER
 order_erb = list(reversed(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
-box_pairs_bre = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS
+box_pairs_bre = dose_response_legacy_box_pairs()
 box_pairs_erb = _layout_box_pairs(order_erb)
-box_pairs_bre_3 = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE
+box_pairs_bre_3 = dose_response_legacy_box_pairs_by_replicate()
 box_pairs_erb_3 = _layout_box_pairs_by_replicate(order_erb)
 
 
@@ -431,7 +431,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER, box_pairs = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE,fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER, box_pairs = None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript.
     
     Args:
@@ -513,7 +513,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
   
 
     
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', fig_type='', plot_mse = True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3 = DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE, pvalue_thresholds=None, hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir = '', fig_type='', plot_mse = True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3 = None, pvalue_thresholds=None, hue_order = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.

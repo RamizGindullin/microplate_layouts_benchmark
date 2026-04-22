@@ -165,3 +165,30 @@ DOSE_RESPONSE_LAYOUT_LEGACY_BOX_PAIRS_BY_REPLICATE = [
     for i in range(len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
     for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_LEGACY_ORDER))
 ]
+
+
+def dose_response_legacy_label(display_name: str) -> str:
+    return DOSE_RESPONSE_LAYOUT_DISPLAY_TO_LEGACY[display_name]
+
+
+def dose_response_legacy_labels(display_names):
+    return [dose_response_legacy_label(name) for name in display_names]
+
+
+def dose_response_legacy_box_pairs(display_names=None):
+    labels = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER if display_names is None else dose_response_legacy_labels(display_names)
+    return [
+        (labels[i], labels[j])
+        for i in range(len(labels))
+        for j in range(i + 1, len(labels))
+    ]
+
+
+def dose_response_legacy_box_pairs_by_replicate(display_names=None, replicates=(1, 2, 3)):
+    labels = DOSE_RESPONSE_LAYOUT_LEGACY_ORDER if display_names is None else dose_response_legacy_labels(display_names)
+    return [
+        ((rep, labels[i]), (rep, labels[j]))
+        for rep in replicates
+        for i in range(len(labels))
+        for j in range(i + 1, len(labels))
+    ]

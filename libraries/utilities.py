@@ -20,6 +20,7 @@ from benchmark_common import (
     DOSE_RESPONSE_LAYOUT_ORDER,
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
+    classify_dose_response_layout_series,
     dose_response_display_labels,
     dose_response_legacy_box_pairs,
     dose_response_legacy_box_pairs_by_replicate,
@@ -64,6 +65,47 @@ def _maybe_translate_dose_response_labels(df, column_name, hue_order):
     return df, hue_order
 
 
+
+def _dose_response_layout_labels_for_frame(hue_order):
+    if set(hue_order) == set(DOSE_RESPONSE_LAYOUT_ORDER):
+        return dose_response_display_labels(hue_order), True
+    return hue_order, False
+
+
+def _concat_dose_response_frames(data_1rep, data_2rep, data_3rep, value_name):
+    frame1 = pd.DataFrame(data_1rep[1:, 3:].T, columns=data_1rep[0, 3:])
+    frame1["Replicate"] = 1
+    frame2 = pd.DataFrame(data_2rep[1:, 3:].T, columns=data_2rep[0, 3:])
+    frame2["Replicate"] = 2
+    frame3 = pd.DataFrame(data_3rep[1:, 3:].T, columns=data_3rep[0, 3:])
+    frame3["Replicate"] = 3
+    df = pd.concat([frame1, frame2, frame3], ignore_index=True)
+    return df.melt(id_vars=["Replicate"], var_name="Layout type", value_name=value_name)
+
+
+def _coerce_numeric_column(df, column_name):
+    df = df.copy()
+    df[column_name] = pd.to_numeric(df[column_name], errors="coerce")
+    return df
+
+
+
+def _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep):
+    columns = [
+        "layout", "compound", "MSE", "error type", "Error", "E", "rows lost",
+        "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"
+    ]
+    frame1 = pd.DataFrame(data_1rep, columns=columns)
+    frame1.insert(0, "replicates", 1)
+    frame2 = pd.DataFrame(data_2rep, columns=columns)
+    frame2.insert(0, "replicates", 2)
+    frame3 = pd.DataFrame(data_3rep, columns=columns)
+    frame3.insert(0, "replicates", 3)
+    df = pd.concat([frame1, frame2, frame3], ignore_index=True)
+    df["layout"] = classify_dose_response_layout_series(df["layout"].astype(str).tolist())
+    return df
+
+
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
     fig, ax = plt.subplots(figsize=(11, 7))
     ax.xaxis.tick_top()
@@ -73,82 +115,6 @@ def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=
         fig.savefig(filename,bbox_inches='tight')
     plt.show()
     plt.close(fig)
-    
-    
-def create_random_layout_controls(plate_id, num_controls=20, num_rows=16, num_columns=24, directory="layouts/controls_manual_layouts"):
-    '''Create a random layout of (negative) controls'''
-    
-    layout = np.full(num_rows*num_columns, 0)
-
-    while layout.sum()<num_controls:
-        idx = randrange(0,num_rows*num_columns)
-        layout[idx] = 1
-
-    B = np.reshape(layout, (-1, num_columns))
-
-    print(B)
-    np.save(directory+'/plate_layout_rand_'+plate_id+'.npy',B)
-
-    
-
-def create_random_layout_compounds(plate_id, num_controls=20, num_rows=16, num_columns=24, directory="layouts/compounds_manual_layouts", size_empty_edge=1):
-    '''Create a random layout of negative controls and compounds'''
-    
-    total_compounds = (num_rows-2*size_empty_edge)*(num_columns-2*size_empty_edge)-num_controls
-    
-    layout = [(total_compounds+1) for i in range(num_controls)]+[i for i in range(1,total_compounds+1)]
-    random.shuffle(layout)
-    
-    layout = np.reshape(layout,(-1, num_columns-2*size_empty_edge))
-    
-    vertical_edge = np.reshape(np.full(size_empty_edge*(num_rows-2*size_empty_edge),0), (-1,size_empty_edge))
-                         
-    layout = np.hstack((vertical_edge,layout))
-    
-    layout = np.hstack((layout,vertical_edge))
-    
-    horizontal_edge = np.reshape(np.full(size_empty_edge*num_columns,0), (-1,num_columns))
-    
-    layout = np.vstack((horizontal_edge,layout))
-    
-    layout = np.vstack((layout,horizontal_edge))
-    
-    print(layout)
-    np.save(directory+'/plate_layout_rand_'+str(num_controls)+"_"+plate_id+'.npy',layout)
-    
-    
-def save_plaid_layout(plate_id, layout_array, num_rows=16, num_columns=24, compounds=36, concentrations=4, replicates=2, size_empty_edge=1, neg_controls=20,directory="layouts/compounds_PLAID_layouts"):
-
-    assert size_empty_edge >= 0
-    assert num_rows >= 0
-    assert num_columns >= 0
-    
-    layout = np.reshape(layout_array, (-1, num_columns-2*size_empty_edge))
-    
-    if size_empty_edge > 0:
-        vertical_edge = np.reshape(np.full(size_empty_edge*(num_rows-2*size_empty_edge),0), (-1,size_empty_edge))
-                         
-        layout = np.hstack((vertical_edge,layout))
-    
-        layout = np.hstack((layout,vertical_edge))
-    
-        horizontal_edge = np.reshape(np.full(size_empty_edge*num_columns,0), (-1,num_columns))
-    
-        layout = np.vstack((horizontal_edge,layout))
-    
-        layout = np.vstack((layout,horizontal_edge))
-    
-    print(layout)
-    np.save(directory+'/plate_layout_'+str(neg_controls)+"-"+str(compounds)+"-"+str(concentrations)+"-"+str(replicates)+"_"+plate_id+'.npy',layout)
-
-    
-def save_plaid_controls_layout(plate_id, layout_array, num_rows=16, num_columns=24, size_empty_edge=1, directory="layouts/controls_PLAID_layouts"):
-    layout = __shape_layout(layout_array, num_rows, num_columns, size_empty_edge)
-    
-    layout = get_controls_layout(layout)
-    
-    print(layout)
-    np.save(directory+'/plate_layout_'+plate_id+'.npy',layout)
     
     
 def get_controls_layout(layout, neg_control = None):
@@ -170,33 +136,6 @@ def get_controls_layout(layout, neg_control = None):
 
 
 
-def save_plaid_screening_layout(plate_id, layout_array, num_rows=16, num_columns=24, size_empty_edge=1, directory="layouts/screening_PLAID_layouts"):
-    neg_id = np.max(layout_array)
-    pos_id = neg_id - 1
-    
-    neg_controls = layout_array.count(neg_id)
-    pos_controls = layout_array.count(pos_id)
-    
-    layout = __shape_layout(layout_array, num_rows, num_columns, size_empty_edge)
-    
-    print(layout)
-    np.save(directory+'/plate_layout_'+str(neg_controls)+"-"+str(pos_controls)+"_"+plate_id+'.npy',layout)
-    
-    
-def create_random_layout_screening(plate_id, neg_controls=10, pos_controls = 10, num_rows=16, num_columns=24, directory="layouts/screening_manual_layouts", size_empty_edge=1):
-    '''Create a random layout for a screening experiment'''
-    
-    total_compounds = (num_rows-2*size_empty_edge)*(num_columns-2*size_empty_edge)-neg_controls-pos_controls
-    
-    layout = [(total_compounds+1) for i in range(pos_controls)]+[(total_compounds+2) for i in range(neg_controls)]+[(i+1) for i in range(total_compounds)]
-    random.shuffle(layout)
-    
-    layout = __shape_layout(layout, num_rows, num_columns, size_empty_edge)
-    
-    print(layout)
-    np.save(directory+'/plate_layout_rand_'+str(neg_controls)+"-"+str(pos_controls)+"_"+plate_id+'.npy',layout)
-    
-    
 def __shape_layout(layout, num_rows, num_columns, size_empty_edge):
     layout = np.reshape(layout,(-1, num_columns-2*size_empty_edge))
     
@@ -216,108 +155,6 @@ def __shape_layout(layout, num_rows, num_columns, size_empty_edge):
     return layout
 
 
-def fill_in_border_layout_screening(plate_id, control_layout, directory="layouts/screening_manual_layouts", size_empty_edge=1):
-    '''Fill in a border layout for a screening experiment'''
-    num_rows, num_columns = control_layout.shape
-    
-    neg_id = np.max(control_layout) #Should be >1
-    pos_id = neg_id - 1 #Should be >0
-    
-    neg_controls = np.count_nonzero(control_layout==neg_id)
-    pos_controls = np.count_nonzero(control_layout==pos_id)
-    
-    total_compounds = (num_rows-2*size_empty_edge)*(num_columns-2*size_empty_edge)-neg_controls-pos_controls
-    
-    pos_ctr = total_compounds + 1
-    neg_ctr = pos_ctr + 1
-    
-    layout = np.full((num_rows, num_columns), 0)
-
-    compound = 1
-    
-    for row_i in range(size_empty_edge,num_rows-size_empty_edge):
-        for col_i in range(size_empty_edge,num_columns-size_empty_edge):
-            if control_layout[row_i][col_i] == neg_id:
-                layout[row_i][col_i] = neg_ctr
-            elif control_layout[row_i][col_i] == pos_id:
-                layout[row_i][col_i] = pos_ctr
-            else:
-                layout[row_i][col_i] = compound
-                compound = compound + 1
-    
-    print(layout)
-    np.save(directory+'/plate_layout_border_'+str(neg_controls)+"-"+str(pos_controls)+"_"+plate_id+'.npy',layout)
-    
-
-    
-def fill_in_border_layout_screening_vertically(plate_id, control_layout, directory="layouts/screening_manual_layouts", size_empty_edge=1):
-    '''Fill in a border layout for a screening experiment'''
-    num_rows, num_columns = control_layout.shape
-    
-    neg_id = np.max(control_layout) #Should be >1
-    pos_id = neg_id - 1 #Should be >0
-    
-    neg_controls = np.count_nonzero(control_layout==neg_id)
-    pos_controls = np.count_nonzero(control_layout==pos_id)
-    
-    total_compounds = (num_rows-2*size_empty_edge)*(num_columns-2*size_empty_edge)-neg_controls-pos_controls
-    
-    pos_ctr = total_compounds + 1
-    neg_ctr = pos_ctr + 1
-    
-    layout = np.full((num_rows, num_columns), 0)
-
-    compound = 1
-    
-    
-    for col_i in range(size_empty_edge,num_columns-size_empty_edge):
-        for row_i in range(size_empty_edge,num_rows-size_empty_edge):
-            if control_layout[row_i][col_i] == neg_id:
-                layout[row_i][col_i] = neg_ctr
-            elif control_layout[row_i][col_i] == pos_id:
-                layout[row_i][col_i] = pos_ctr
-            else:
-                layout[row_i][col_i] = compound
-                compound = compound + 1
-    
-    print(layout)
-    np.save(directory+'/plate_layout_border_'+str(neg_controls)+"-"+str(pos_controls)+"_"+plate_id+'.npy',layout)
-    
-
-    
-    
-def fill_in_border_layout(plate_id, control_layout, directory="layouts/screening_manual_layouts", size_empty_edge=1):
-    '''Fill in a border layout for a screening experiment'''
-    num_rows, num_columns = control_layout.shape
-    
-    neg_id = np.max(control_layout)
-    
-    neg_controls = np.count_nonzero(control_layout==neg_id)
-    
-    total_compounds = (num_rows-2*size_empty_edge)*(num_columns-2*size_empty_edge)-neg_controls
-    
-    neg_ctr = total_compounds + 1
-    
-    layout = np.full((num_rows, num_columns), 0)
-
-    compound = 1
-    
-    for row_i in range(size_empty_edge,num_rows-size_empty_edge):
-        for col_i in range(size_empty_edge,num_columns-size_empty_edge):
-            if control_layout[row_i][col_i] == neg_id:
-                layout[row_i][col_i] = neg_ctr
-            else:
-                layout[row_i][col_i] = compound
-                compound += 1
-    
-    print(layout)
-    np.save(directory+'/plate_layout_border_'+str(neg_controls)+"_"+plate_id+'.npy',layout)
-    
-
-    
-    
-    
-# Returns True if there are duplicated layouts
 def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
 
     layouts = os.listdir(layout_dir)

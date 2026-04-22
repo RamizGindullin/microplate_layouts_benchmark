@@ -210,3 +210,16 @@ def validate_layout_registry_consistency():
     sr_keys = {spec.key for spec in SCREENING_LAYOUT_SPECS}
     assert dr_keys == expected == sr_keys
     print("✅ Layout registries aligned")
+
+
+
+def classify_dose_response_layout_name(layout_name: str) -> str:
+    if layout_name.startswith("plate_layout_rand"):
+        return "Random"
+    if layout_name.startswith("plate_layout_"):
+        return "COMPD"
+    return layout_name
+
+
+def classify_dose_response_layout_series(layout_values):
+    return [classify_dose_response_layout_name(value) for value in layout_values]

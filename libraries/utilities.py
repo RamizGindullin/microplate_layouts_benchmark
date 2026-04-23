@@ -140,7 +140,6 @@ def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=
     if filename:
         fig.savefig(filename,bbox_inches='tight')
     plt.close(fig)
-    plt.close(fig)
     
     
 def get_controls_layout(layout, neg_control = None):
@@ -301,7 +300,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=DOSE_RESPONSE_LAYOUT_BOX_PAIRS, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript. """
     residuals_df = _prepare_dose_response_residuals_frame(
         residuals_1rep, residuals_2rep, residuals_3rep
@@ -660,19 +659,22 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     screening_scores_df[metric+'_expected'] = pd.to_numeric(screening_scores_df[metric+'_expected'], errors='coerce')
     screening_scores_df[metric] = pd.to_numeric(screening_scores_df[metric], errors='coerce')
 
-    results_df = pd.DataFrame(np.square(screening_scores_df[screening_scores_df['plate_type'] == order[0]][metric+'_expected'] - 
-                                        screening_scores_df[screening_scores_df['plate_type'] == order[0]][metric]),
+    results_df = pd.DataFrame(np.square(screening_scores_df[screening_scores_df['display_type'] == order[0]][metric+'_expected'] - 
+                                        screening_scores_df[screening_scores_df['display_type'] == order[0]][metric]),
                               columns = ['MSE'])
     results_df.insert(0, 'layout', order[0])
 
-    for type in order[1:]:
-        temp_df = pd.DataFrame(np.square(screening_scores_df[screening_scores_df['plate_type'] == type][metric+'_expected'] -
-                                                             screening_scores_df[screening_scores_df['plate_type'] == type][metric]),
-                                                             columns = ['MSE'])
-        temp_df.insert(0, 'layout', type)
-        results_df = pd.concat([results_df, temp_df])
+    frames = []
+    for layout_name in order:
+        sub = screening_scores_df[screening_scores_df['display_type'] == layout_name]
+        mse_df = pd.DataFrame(
+            np.square(sub[metric + '_expected'] - sub[metric]), columns=['MSE']
+        )
+        mse_df.insert(0, 'layout', layout_name)
+        frames.append(mse_df)
+    results_df = pd.concat(frames, ignore_index=True)
     
-    sns.set_style("whitegrid", {'axes.grid' : True})
+    sns.set_theme(style="whitegrid")
 
     if palette is None:
         palette = sns.color_palette("Greens",5)
@@ -701,214 +703,212 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     plt.close(fig)
 
 
-        
+
+def _load_screening_residuals(residuals_filename):
+    """Read screening residuals CSV, drop lost-row plates, add derived columns.
+
+    Returns a cleaned DataFrame with columns including 'display_type',
+    'obtained_result_inv' (negated for scoring), and 'layout' (alias of
+    display_type kept for backward compatibility with callers that used
+    the old column name).
+    """
+    df = pd.read_csv(residuals_filename)
+    df = df[df.lost_rows < 1].copy()
+    # Validate display_type values against the registry early so mismatches
+    # surface with a clear error rather than silently empty plots.
+    _classify_screening_layout_series(df["display_type"])
+    df["layout"] = df["display_type"]
+    df["obtained_result_inv"] = -df["obtained_result"]
+    return df
+
+
+def _plot_roc_pr_one_layout(ax, df, display_type, color, curve_type, batch):
+    """Compute and plot a single ROC or PR curve; return the AUC string.
+
+    Args:
+        ax: matplotlib Axes to plot onto.
+        df: full screening residuals DataFrame (already filtered for lost_rows<1).
+        display_type: layout label to select rows.
+        color: line colour string.
+        curve_type: "roc" or "pr".
+        batch: integer batch index to select.
+
+    Returns:
+        Legend label string including the AUC value.
+    """
+    sub = df[(df["display_type"] == display_type) & (df["batch"] == batch)]
+    y_true = sub["activity"].to_numpy()
+    y_score = sub["obtained_result_inv"].to_numpy()
+
+    if curve_type == "roc":
+        fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
+        auc_val = metrics.roc_auc_score(y_true, y_score)
+        ax.plot(fpr, tpr, color=color)
+    else:
+        precision, recall, _ = metrics.precision_recall_curve(y_true, y_score)
+        auc_val = metrics.auc(recall, precision)
+        ax.plot(recall, precision, color=color)
+
+    return f"{display_type} (AUC = {round(auc_val, 2)})"
+
+
 def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
+    """Plot ROC curves for all layouts defined in SCREENING_LAYOUT_SPECS.
 
-    screening_residuals_df = pd.read_csv(residuals_filename)
-    screening_residuals_df['layout'] = screening_residuals_df['display_type']
+    Layout order, display labels, and colours are driven by the registry so
+    adding a new layout requires only a change to SCREENING_LAYOUT_SPECS.
 
-    screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
+    Args:
+        residuals_filename: path to the screening residuals CSV.
+        fig_name: output filename (saved to fig_dir); skipped if None.
+        fig_dir: directory prefix for the saved figure.
+        batch: integer batch index to plot.
+        batches: total number of batches (unused; retained for API compatibility).
+    """
+    # Colours aligned with SCREENING_LAYOUT_SPECS order: Random, PLAID, COMPD.
+    layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
 
-    screening_residuals_df['layout'] = screening_residuals_df['display_type']
-
-    screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
-
-    colors = ['#59296e','#cc0253','#e68302']
-
-    results_plaid = screening_residuals_df[(screening_residuals_df.layout=='PLAID') ]
-    results_random = screening_residuals_df[(screening_residuals_df.layout=='Random') ]
-    results_border = screening_residuals_df[(screening_residuals_df.layout=='COMPD') ]
-
+    df = _load_screening_residuals(residuals_filename)
 
     fig, ax = plt.subplots(figsize=(3, 2))
+    legend_labels = []
+    for spec, color in zip(SCREENING_LAYOUT_SPECS, layout_colors):
+        label = _plot_roc_pr_one_layout(ax, df, spec.display_type, color, "roc", batch)
+        legend_labels.append(label)
 
-    ## Random
-    fpr, tpr, thresholds = metrics.roc_curve(results_random.loc[results_random.batch==batch,'activity'],  results_random.loc[results_random.batch==batch,'obtained_result_inv'])
-    auc_random = metrics.roc_auc_score(results_random.loc[results_random.batch==batch,'activity'],  results_random.loc[results_random.batch==batch,'obtained_result_inv'])
-
-    #create ROC curve
-    plt.plot(fpr,tpr,color=colors[0])
-
-
-    ## PLAID
-    fpr, tpr, thresholds = metrics.roc_curve(results_plaid.loc[results_plaid.batch==batch,'activity'],  results_plaid.loc[results_plaid.batch==batch,'obtained_result_inv'])
-    auc_plaid = metrics.roc_auc_score(results_plaid.loc[results_plaid.batch==batch,'activity'],  results_plaid.loc[results_plaid.batch==batch,'obtained_result_inv'])
-    
-    
-    #create ROC curve
-    plt.plot(fpr,tpr,color=colors[1])
-
-    ## Border
-    fpr, tpr, thresholds = metrics.roc_curve(results_border.loc[results_border.batch==batch,'activity'],  results_border.loc[results_border.batch==batch,'obtained_result_inv'])
-    auc_border = metrics.roc_auc_score(results_border.loc[results_border.batch==batch,'activity'],  results_border.loc[results_border.batch==batch,'obtained_result_inv'])
-
-    #create ROC curve
-    plt.plot(fpr,tpr,color=colors[2])
-
-
-    plt.ylabel('True Positive Rate', fontsize = 10)
-    plt.xlabel('False Positive Rate', fontsize = 10)
-    plt.legend(labels=['Random (AUC = '+str(round(auc_random,2))+')',
-                       'PLAID (AUC = '+str(round(auc_plaid,2))+')',
-                       'COMPD (AUC = '+str(round(auc_border,2))+')'],
-               loc='lower right', fontsize = 8)
-    plt.xticks(fontsize=8)
-    plt.yticks(fontsize=8)
+    ax.set_ylabel("True Positive Rate", fontsize=10)
+    ax.set_xlabel("False Positive Rate", fontsize=10)
+    ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
+    ax.tick_params(axis="both", labelsize=8)
     if fig_name:
-        fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
+        fig.savefig(fig_dir + fig_name, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    
 
-    
+
 def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
+    """Plot Precision-Recall curves for all layouts defined in SCREENING_LAYOUT_SPECS.
 
-    #plt.rcParams['text.usetex'] = True
+    Layout order, display labels, and colours are driven by the registry so
+    adding a new layout requires only a change to SCREENING_LAYOUT_SPECS.
 
-    screening_residuals_df = pd.read_csv(residuals_filename)
-    screening_residuals_df['layout'] = screening_residuals_df['display_type']
+    Args:
+        residuals_filename: path to the screening residuals CSV.
+        fig_name: output filename (saved to fig_dir); skipped if None.
+        fig_dir: directory prefix for the saved figure.
+        batch: integer batch index to plot.
+        batches: total number of batches (unused; retained for API compatibility).
+    """
+    layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
 
-    screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
-
-    screening_residuals_df['layout'] = screening_residuals_df['display_type']
-
-    screening_residuals_df['obtained_result_inv'] = -screening_residuals_df.obtained_result
-
-    colors = ['#59296e','#cc0253','#e68302']
-
-    results_plaid = screening_residuals_df[(screening_residuals_df.layout=='PLAID') ]
-    results_random = screening_residuals_df[(screening_residuals_df.layout=='Random') ]
-    results_border = screening_residuals_df[(screening_residuals_df.layout=='COMPD') ]
-
+    df = _load_screening_residuals(residuals_filename)
 
     fig, ax = plt.subplots(figsize=(3, 2))
+    legend_labels = []
+    for spec, color in zip(SCREENING_LAYOUT_SPECS, layout_colors):
+        label = _plot_roc_pr_one_layout(ax, df, spec.display_type, color, "pr", batch)
+        legend_labels.append(label)
 
-
-     ## Random
-    precision, recall, thresholds = metrics.precision_recall_curve(results_random.loc[results_random.batch==batch,'activity'],  results_random.loc[results_random.batch==batch,'obtained_result_inv'])
-    auc_random = metrics.auc(recall,precision)
-
-    #draw PR curve
-    plt.plot(recall,precision,color=colors[0])
-
-
-    ## PLAID
-    precision, recall, thresholds = metrics.precision_recall_curve(results_plaid.loc[results_plaid.batch==batch,'activity'],  results_plaid.loc[results_plaid.batch==batch,'obtained_result_inv'])
-    auc_plaid = metrics.auc(recall,precision)
-    auc_plaid_str = '{0:.2g}'.format(auc_plaid)
-
-    #draw PR curve
-    plt.plot(recall,precision,color=colors[1])
-
-    ## Border
-    precision, recall, thresholds = metrics.precision_recall_curve(results_border.loc[results_border.batch==batch,'activity'],  results_border.loc[results_border.batch==batch,'obtained_result_inv'])
-    auc_border = metrics.auc(recall,precision)
-
-    #draw PR curve
-    plt.plot(recall,precision,color=colors[2])
-
-
-    plt.ylabel('Precision', fontsize = 10)
-    plt.xlabel('Recall', fontsize = 10)
-    plt.legend(labels=['Random (AUC = '+str(round(auc_random,2))+')',
-                       'PLAID (AUC = '+str(round(auc_plaid,2))+')',
-                       'COMPD (AUC = '+str(round(auc_border,2))+')'],
-               loc='lower right', fontsize = 8)
-    plt.xticks(fontsize=8)
-    plt.yticks(fontsize=8)
+    ax.set_ylabel("Precision", fontsize=10)
+    ax.set_xlabel("Recall", fontsize=10)
+    ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
+    ax.tick_params(axis="both", labelsize=8)
     if fig_name:
-        fig.savefig(fig_dir+fig_name,bbox_inches='tight',dpi=300)
+        fig.savefig(fig_dir + fig_name, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    
 
-    
+
+# TODO(dead-code): pr_auc_score is not called by either benchmark script.
+# Remove once confirmed no external callers exist.
 def pr_auc_score(y_true, y_score):
-    precision, recall, thresholds = metrics.precision_recall_curve(y_true, y_score)
-    
-    return metrics.auc(recall,precision)
+    precision, recall, _ = metrics.precision_recall_curve(y_true, y_score)
+    return metrics.auc(recall, precision)
 
-def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='',max_value=300):
-    screening_residuals_df = pd.read_csv(residuals_filename)
 
-    screening_residuals_df = screening_residuals_df[screening_residuals_df.lost_rows<1]
+def _scatter_sample_groups(ax, df, x_col, y_col, neg_control_id, pos_control_id, s=14):
+    """Draw four overlaid scatterplots for the four sample/control groups.
 
-    screening_residuals_df['layout'] = screening_residuals_df['display_type']
+    Groups (in draw order so controls are on top):
+      1. Negative samples (activity < 1, not a control)
+      2. Negative controls
+      3. Positive samples (active, not a control)
+      4. Positive controls
 
-    neg_control_id = np.max(screening_residuals_df.comp_id)
-    pos_control_id = neg_control_id -1 
+    Returns the axes object (same as input ax).
+    """
+    neg_samples   = df[(df["activity"] < 1) & (df["comp_id"] != neg_control_id) & (df["comp_id"] != pos_control_id)]
+    neg_controls  = df[df["comp_id"] == neg_control_id]
+    pos_samples   = df[(df["activity"] > 0) & (df["comp_id"] < pos_control_id)]
+    pos_controls  = df[df["comp_id"] == pos_control_id]
+
+    sns.scatterplot(x=x_col, y=y_col, data=neg_samples,  color="#d998b1", s=s, ax=ax)
+    sns.scatterplot(x=x_col, y=y_col, data=neg_controls, color="#bf1f5f", s=s, ax=ax)
+    sns.scatterplot(x=x_col, y=y_col, data=pos_samples,  color="#a8bfe6", s=s, ax=ax)
+    sns.scatterplot(x=x_col, y=y_col, data=pos_controls, color="#3c7ef0", s=s, ax=ax)
+    return ax
+
+
+def _save_screening_scatter(df, x_col, y_col, neg_control_id, pos_control_id,
+                             min_value, max_value, filepath):
+    """Create, save, and close a single screening scatter figure."""
+    fig, ax = plt.subplots(figsize=(4, 3))
+    ax.set_ylim(min_value, max_value)
+    _scatter_sample_groups(ax, df, x_col, y_col, neg_control_id, pos_control_id)
+    ax.set_xlabel("Plate number", fontsize=10)
+    ax.set_ylabel("Response", fontsize=10)
+    ax.set_xticks(range(5, 41, 5))
+    ax.legend(
+        labels=["Negative samples", "Negative control", "Positive samples", "Positive control"],
+        ncol=2, loc="upper center", fontsize=8,
+    )
+    if filepath:
+        fig.savefig(filepath, bbox_inches="tight", dpi=1200)
+    plt.close(fig)
+
+
+def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_value=300):
+    """Plot per-layout screening scatter figures driven by SCREENING_LAYOUT_SPECS.
+
+    Produces one figure per layout (obtained_result vs plate_id) plus one
+    additional "expected" figure using PLAID data and expected_result.
+    Output filenames are:
+      - screening-bowl-<fig_name>-expected.png        (PLAID expected values)
+      - screening-bowl-<fig_name>-<key>.png           (obtained per layout)
+
+    Adding a new layout to SCREENING_LAYOUT_SPECS automatically produces a new
+    output figure; the expected panel always uses the first layout in the spec
+    whose display_type matches the PLAID entry.
+    """
+    df = _load_screening_residuals(residuals_filename)
 
     sns.set_theme(style="whitegrid")
 
-    #max_value = max(screening_residuals_df.obtained_result)+45
-    #max_value = 300
-    min_value = min(screening_residuals_df.obtained_result)-10
+    neg_control_id = int(np.max(df["comp_id"]))
+    pos_control_id = neg_control_id - 1
+    min_value = float(df["obtained_result"].min()) - 10
 
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.set(ylim=(min_value,max_value))
-    #plt.yscale('log', base=2)
+    # Determine which layout to use for the "expected" reference panel.
+    # By convention this is PLAID (the first registry entry with display_type=="PLAID").
+    expected_spec = next(s for s in SCREENING_LAYOUT_SPECS if s.display_type == "PLAID")
+    expected_df = df[df["display_type"] == expected_spec.display_type]
 
-    #'expected_result','obtained_result'
-    ax = sns.scatterplot(x="plate_id", y="expected_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.activity <1)], color='#d998b1', s=14)
-    ax = sns.scatterplot(x="plate_id", y="expected_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.comp_id==neg_control_id)],color='#bf1f5f', s=14)
-    ax = sns.scatterplot(x="plate_id", y="expected_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.activity > 0) & (screening_residuals_df.comp_id<pos_control_id)],color='#a8bfe6', s=14)
-    ax = sns.scatterplot(x="plate_id", y="expected_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.comp_id==pos_control_id)], color='#3c7ef0', s=14)
-    plt.xlabel('Plate number', fontsize = 10)
-    plt.ylabel('Response', fontsize = 10)
-    plt.xticks([i for i in range(5,41,5)])
-    plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    if fig_name:
-        fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-expected.png",bbox_inches='tight',dpi=1200)
-    plt.close(fig)
+    # --- Expected (undistorted) panel ---
+    prefix = fig_dir + "screening-bowl-" + fig_name if fig_name else None
+    _save_screening_scatter(
+        expected_df, "plate_id", "expected_result",
+        neg_control_id, pos_control_id,
+        min_value, max_value,
+        filepath=prefix + "-expected.png" if prefix else None,
+    )
 
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.set(ylim=(min_value,max_value))
-    #plt.yscale('log', base=2)
-
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.activity <1)], color='#d998b1', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.comp_id==neg_control_id)],color='#bf1f5f', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.activity > 0) & (screening_residuals_df.comp_id<pos_control_id)],color='#a8bfe6', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='PLAID') & (screening_residuals_df.comp_id==pos_control_id)], color='#3c7ef0', s=14)
-    plt.xlabel('Plate number', fontsize = 10)
-    plt.ylabel('Response', fontsize = 10)
-    plt.xticks([i for i in range(5,41,5)])
-    plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    if fig_name:
-        fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-plaid.png",bbox_inches='tight',dpi=1200)
-    plt.close(fig)
-
-
-    fig, ax = plt.subplots(figsize=(4,3))
-    ax.set(ylim=(min_value,max_value))
-    #plt.yscale('log', base=2)
-
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='Random') & (screening_residuals_df.activity <1)], color='#d998b1', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='Random') & (screening_residuals_df.comp_id==neg_control_id)],color='#bf1f5f', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='Random') & (screening_residuals_df.activity > 0) & (screening_residuals_df.comp_id<pos_control_id)],color='#a8bfe6', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='Random') & (screening_residuals_df.comp_id==pos_control_id)], color='#3c7ef0', s=14)
-    plt.xlabel('Plate number', fontsize = 10)
-    plt.ylabel('Response', fontsize = 10)
-    plt.xticks([i for i in range(5,41,5)])
-    plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    if fig_name:
-        fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-random.png",bbox_inches='tight',dpi=1200)
-    plt.close(fig)
-
-
-    fig, ax = plt.subplots(figsize=(4, 3))
-    ax.set(ylim=(min_value,max_value))
-
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='COMPD') & (screening_residuals_df.activity <1)], color='#d998b1', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='COMPD') & (screening_residuals_df.comp_id==neg_control_id)],color='#bf1f5f', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='COMPD') & (screening_residuals_df.activity > 0) & (screening_residuals_df.comp_id<pos_control_id)],color='#a8bfe6', s=14)
-    ax = sns.scatterplot(x="plate_id", y="obtained_result", data=screening_residuals_df.loc[(screening_residuals_df.layout=='COMPD') & (screening_residuals_df.comp_id==pos_control_id)], color='#3c7ef0', s=14)
-    plt.xlabel('Plate number', fontsize = 10)
-    plt.ylabel('Response', fontsize = 10)
-    plt.xticks([i for i in range(5,41,5)])
-    plt.legend(labels=['Negative samples','Negative control','Positive samples','Positive control'],ncol=2, loc="upper center", fontsize = 8)
-    if fig_name:
-        fig.savefig(fig_dir+"screening-bowl-"+fig_name+"-compd.png",bbox_inches='tight',dpi=1200)
-    plt.close(fig)
-        
-
+    # --- Per-layout obtained-result panels ---
+    for spec in SCREENING_LAYOUT_SPECS:
+        layout_df = df[df["display_type"] == spec.display_type]
+        _save_screening_scatter(
+            layout_df, "plate_id", "obtained_result",
+            neg_control_id, pos_control_id,
+            min_value, max_value,
+            filepath=prefix + f"-{spec.key}.png" if prefix else None,
+        )
 
 def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos_control_id=-1, order=0, vmin=None, vmax=None, filename=None):
     

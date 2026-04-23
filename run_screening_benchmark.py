@@ -299,10 +299,12 @@ def simulate_condition(
                                     norm_neg_std, norm_pos_std,
                                 )
 
+                            except _SkipPlate as exc:
+                                print(f"WARNING: {exc}")
+                                continue
                             except Exception as exc:
                                 raise _SkipPlate(
-                                    f"Skipping {layout_file} batch={batch} "
-                                    f"lost_rows={lost_rows}: {exc}"
+                                    f"Skipping {layout_file} batch={batch} lost_rows={lost_rows}: {exc}"
                                 ) from exc
 
                             scores_writer.writerow([
@@ -483,10 +485,6 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     neg_stdev = 3
     pos_stdev = 4
 
-    # NOTE: run_metrics_simulation uses its own plate_types dicts (not PlateType objects)
-    # because sc.test_quality_assessment_metrics expects plain dicts with "type"/"dir"/"regex".
-    # These are intentionally kept consistent with cfg.plate_types() — if you add a new layout,
-    # update both places. This duplication will be removed when the layout registry lands.
     error_types = [{"type": "bowl-nl", "error_function": dt.add_bowlshaped_errors_nl}]
     data_directory = str(cfg.metrics_data_dir) + os.sep
 

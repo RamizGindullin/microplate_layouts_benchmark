@@ -135,7 +135,7 @@ def test_quality_assessment_metrics(plate_types,error_types,error,id_text,neg_co
     # Write headers
     scores_writer = csv.writer(screening_scores_data_f)
 
-    scores_writer.writerow(['plate', 'plate_type', 'error_type', 'error', 'Zfactor_expected', 'SSMD_expected', 'Zfactor', 'SSMD'])
+    scores_writer.writerow(['plate', 'display_type', 'error_type', 'error', 'Zfactor_expected', 'SSMD_expected', 'Zfactor', 'SSMD'])
 
     for plate_type in plate_types:
         layout_dir = plate_type['dir']

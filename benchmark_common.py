@@ -34,6 +34,7 @@ class LayoutSpec:
     layout_dir: str
     regex_template: str
     error_correction: Callable = nrm.normalize_plate_lowess_2d
+    color: str = ""  # plot colour for this layout (used in ROC/PR/scatter figures)
 
     def as_dict(self, **fmt: Any) -> Dict[str, Any]:
         return {
@@ -72,18 +73,21 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="Random",
         layout_dir="layouts/screening_RANDM_layouts/",
         regex_template=r"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        color="#59296e",
     ),
     LayoutSpec(
         key="plaid",
         display_type="PLAID",
         layout_dir="layouts/screening_PLAID_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        color="#cc0253",
     ),
     LayoutSpec(
         key="compd",
         display_type="COMPD",
         layout_dir="layouts/screening_COMPD_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        color="#e68302",
     ),
 ]
 

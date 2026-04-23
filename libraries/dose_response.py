@@ -394,7 +394,7 @@ def _run_experiment(
     replicates=None,
 ):
     layout = np.load(layout_dir + layout_file)
-    if plate_type is not None and plate_type["type"] == "COMPD":
+    if plate_type is not None and plate_type.get("requires_layout_update", False):
         layout = update_compd_layout(layout, compounds, concentrations, replicates)
 
     neg_control_id = np.max(layout)

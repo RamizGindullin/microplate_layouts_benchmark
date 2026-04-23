@@ -482,6 +482,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
             "type": layout_type,
             "dir": layout_dir,
             "error_correction": error_type["error_correction"],
+            "requires_layout_update": plate_type.get("requires_layout_update", False),
         }
 
         for limit in limits:

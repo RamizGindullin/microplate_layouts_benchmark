@@ -35,6 +35,8 @@ class LayoutSpec:
     regex_template: str
     error_correction: Callable = nrm.normalize_plate_lowess_2d
     color: str = ""  # plot colour for this layout (used in ROC/PR/scatter figures)
+    requires_layout_update: bool = False  # True for layouts (e.g. COMPD) that need
+                                          # update_compd_layout() applied after loading
 
     def as_dict(self, **fmt: Any) -> Dict[str, Any]:
         return {
@@ -42,6 +44,7 @@ class LayoutSpec:
             "dir": self.layout_dir,
             "regex": self.regex_template.format(**fmt),
             "error_correction": self.error_correction,
+            "requires_layout_update": self.requires_layout_update,
         }
 
 
@@ -51,6 +54,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="COMPD",
         layout_dir="layouts/compounds_COMPD_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+        requires_layout_update=True,
     ),
     LayoutSpec(
         key="plaid",

@@ -374,7 +374,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 
     results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
-    results_df = results_df.sort_values('layout', key = lambda s: s.apply(['Random','PLAID','COMPD'].index))
+    results_df = results_df.sort_values('layout', key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index))
 #df = df.sort_values('A', key=lambda s: s.apply(['July', 'August', 'Sept'].index), ignore_index=True)
 
     fig, ax = plt.subplots(figsize=(4, 3))
@@ -567,7 +567,7 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
     
     results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
-    layouts = ['Random','PLAID','COMPD']
+    layouts = DOSE_RESPONSE_LAYOUT_ORDER
     
     latex_f.write("\\multirow{4}{*}{"+table_text+"}")
     

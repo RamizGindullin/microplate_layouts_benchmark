@@ -281,7 +281,7 @@ def normalize_plate_lowess_2d(plate_array_in, layout, neg_control_id, min_dist=N
     control_locations = util.get_controls_layout(layout,neg_control=neg_control_id)
 
     if control_locations.sum() < 2:
-        return plate_array.copy()
+        return plate_array_in.copy()
     
     num_rows, num_columns = plate_array.shape
     

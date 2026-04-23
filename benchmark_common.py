@@ -106,7 +106,7 @@ SCREENING_LAYOUT_BOX_PAIRS = [
 def screening_plate_types(neg_controls: int, pos_controls: int):
     return [
         {
-            "type": spec.display_type,
+            "type": spec.key,
             "display_type": spec.display_type,
             "dir": spec.layout_dir,
             "regex": spec.regex_template.format(
@@ -122,7 +122,7 @@ def screening_plate_types(neg_controls: int, pos_controls: int):
 def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
     return [
         {
-            "type": spec.display_type,
+            "type": spec.key,
             "display_type": spec.display_type,
             "dir": spec.layout_dir,
             "regex": spec.regex_template.format(

@@ -16,6 +16,7 @@ from moepy import lowess
 from scipy.interpolate import interp1d
 from benchmark_common import (
     DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
+    DOSE_RESPONSE_LAYOUT_BOX_PAIRS,
     DOSE_RESPONSE_LAYOUT_ORDER,
     DOSE_RESPONSE_LAYOUT_SPECS,
     SCREENING_LAYOUT_BOX_PAIRS,

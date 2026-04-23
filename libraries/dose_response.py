@@ -503,3 +503,243 @@ def generate_compound_curves(
         }
         for i in range(compounds)
     ]
+
+
+def _run_one_plate(
+    plate_type,
+    layout_file,
+    plate_content,
+    et,
+    current_e,
+    compounds,
+    concentrations,
+    replicates,
+    limit,
+    df_params,
+    expected_noise=0.01,
+):
+    """Run one plate experiment and return (abs_results, rel_results, plate_residuals).
+
+    Inner loop body extracted from the original notebook's ``function()`` helper
+    (dose-response-experiments.ipynb, astra-uu-se/COMPD, cell 3).
+
+    Column 0 of every output array is ``plate_type["display_type"]`` (e.g. "COMPD",
+    "PLAID", "Random") rather than the raw layout filename.  This mirrors the
+    screening benchmark, where ``display_type`` is written directly into the CSV so
+    that ``_classify_dose_response_layout_series`` in utilities.py can validate it
+    without needing to parse filenames.
+    """
+    layout_dir = plate_type["dir"]
+    compounds_array = df_params.index.to_numpy()
+    lost_rows = limit["to"] - limit["from"]
+    display_type = plate_type["display_type"]
+
+    fit_table = plate_curves_after_error(
+        layout_dir,
+        layout_file,
+        plate_content.copy(),
+        expected_noise,
+        et["error_function"],
+        et["error"],
+        plate_type["error_correction"],
+        lose_from_row=limit["from"],
+        lose_to_row=limit["to"],
+        plate_type=plate_type,
+        compounds=compounds,
+        concentrations=concentrations,
+        replicates=replicates,
+    )
+
+    obtained_absolute_ic50 = IC50(
+        fit_table["b"], fit_table["c"], fit_table["d"], fit_table["e"]
+    )
+
+    res_array = np.concatenate(fit_table["residuals"].to_numpy())
+    true_res_array = np.concatenate(fit_table["true_residuals"].to_numpy())
+    res_size = len(res_array)
+
+    # Residuals CSV columns (7):
+    # ["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"]
+    # "E" = current_e (the EC50 bucket for this batch), kept for schema compatibility.
+    plate_residuals = np.vstack([
+        np.full(res_size, display_type),
+        np.full(res_size, et["type"]),
+        np.full(res_size, et["error"]),
+        np.full(res_size, current_e),
+        np.full(res_size, lost_rows),
+        res_array,
+        true_res_array,
+    ])
+
+    plate_rel_ic50 = np.absolute(
+        np.subtract(np.log10(df_params["e"]), np.log10(fit_table["e"]))
+    )
+    plate_abs_ic50 = np.absolute(
+        np.subtract(
+            np.log10(df_params["abs IC50"]),
+            np.log10(obtained_absolute_ic50),
+        )
+    )
+
+    display_type_array = np.full(len(compounds_array), display_type)
+    error_type_array  = np.full(len(compounds_array), et["type"])
+    error_array       = np.full(len(compounds_array), et["error"])
+    e_array           = np.full(len(compounds_array), current_e)
+    r_lost_array      = np.full(len(compounds_array), lost_rows)
+
+    # IC50/d_max CSV columns (16):
+    # ["layout", "compound", "MSE", "error type", "Error", "E", "rows lost",
+    #  "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"]
+    rel_results = np.vstack([
+        display_type_array,
+        compounds_array,
+        plate_rel_ic50.to_numpy(),
+        error_type_array,
+        error_array,
+        e_array,
+        r_lost_array,
+        fit_table["r2_score"].to_numpy(),
+        df_params["b"].to_numpy(), df_params["c"].to_numpy(),
+        df_params["d"].to_numpy(), df_params["e"].to_numpy(),
+        fit_table["b"].to_numpy(), fit_table["c"].to_numpy(),
+        fit_table["d"].to_numpy(), fit_table["e"].to_numpy(),
+    ])
+    abs_results = np.vstack([
+        display_type_array,
+        compounds_array,
+        plate_abs_ic50.to_numpy(),
+        error_type_array,
+        error_array,
+        e_array,
+        r_lost_array,
+        fit_table["r2_score"].to_numpy(),
+        df_params["b"].to_numpy(), df_params["c"].to_numpy(),
+        df_params["d"].to_numpy(), df_params["e"].to_numpy(),
+        fit_table["b"].to_numpy(), fit_table["c"].to_numpy(),
+        fit_table["d"].to_numpy(), fit_table["e"].to_numpy(),
+    ])
+
+    return abs_results, rel_results, plate_residuals
+
+
+def full_dose_response_evaluation(
+    plate_types_location,
+    error_types,
+    e_from=1,
+    e_to=100,
+    e_step=5,
+    compounds=48,
+    concentrations=6,
+    replicates=1,
+    dilution=18,
+    error_nl=0.055,
+    lose_rows_from=1,
+    lose_rows_to=2,
+    today="test-",
+    id_text="",
+    data_directory="generated-data/dose-response/",
+    expected_noise=0.01,
+):
+    """Run the full dose-response benchmark for one scenario and write result CSVs.
+
+    Ported from ``dose-response-experiments.ipynb`` (astra-uu-se/COMPD, cell 3).
+    The original notebook's inner ``function()`` helper is now ``_run_one_plate``.
+
+    Column 0 of every written CSV row is ``display_type`` (e.g. "COMPD", "PLAID",
+    "Random"), mirroring ``run_screening_benchmark.py`` which writes
+    ``plate_type.display_type`` directly rather than raw layout filenames.
+    ``_prepare_dose_response_results_frame`` in ``utilities.py`` expects this and
+    validates it via ``_classify_dose_response_layout_series``.
+
+    Parameters
+    ----------
+    plate_types_location : list[dict]
+        Each dict must have keys: ``type``, ``display_type``, ``dir``, ``regex``,
+        ``error_correction``.  Build with ``benchmark_common.dose_response_plate_types()``.
+    error_types : list[dict]
+        Each dict must have keys: ``type``, ``error_function``, ``error``.
+    e_from, e_to, e_step : int
+        Range of EC50 values to sweep (``range(e_from, e_to, e_step)``).
+    today : str
+        Date/tag prefix (e.g. ``"20250706-"``).
+    id_text : str
+        Scenario suffix appended after ``today`` in filenames.
+    data_directory : str
+        Directory where CSV files are written; created if absent.
+    """
+    import re as _re
+
+    os.makedirs(data_directory, exist_ok=True)
+
+    tag = today + id_text if id_text else today
+
+    abs_path = os.path.join(
+        data_directory,
+        f"absolute_ic50_data-{compounds}-{concentrations}-dil{dilution}"
+        f"-{replicates}-{error_nl}-{tag}.csv",
+    )
+    rel_path = os.path.join(
+        data_directory,
+        f"relative_ic50_data-{compounds}-{concentrations}-dil{dilution}"
+        f"-{replicates}-{error_nl}-{tag}.csv",
+    )
+    res_path = os.path.join(
+        data_directory,
+        f"residuals-{compounds}-{concentrations}-dil{dilution}"
+        f"-{replicates}-{error_nl}-{tag}.csv",
+    )
+
+    with (
+        open(abs_path, "a") as abs_f,
+        open(rel_path, "a") as rel_f,
+        open(res_path, "a") as res_f,
+    ):
+        for current_e in range(e_from, e_to, e_step):
+            print(f"\nTesting compounds with e in range {current_e}-{current_e + e_step}:")
+
+            params = generate_compound_curves(
+                compounds, concentrations, dilution, current_e
+            )
+            df_params = pd.DataFrame.from_dict(params).set_index("compound")
+            df_params["abs IC50"] = IC50(
+                df_params["b"], df_params["c"], df_params["d"], df_params["e"]
+            )
+
+            plate_content = generate_plate_content(
+                dose_response_params=params, replicates=replicates
+            )
+
+            for plate_type in plate_types_location:
+                print(f"  Using {plate_type['display_type']} layouts...")
+                layout_dir = plate_type["dir"]
+                try:
+                    layouts = os.listdir(layout_dir)
+                except FileNotFoundError:
+                    print(f"    WARNING: layout directory not found: {layout_dir!r}")
+                    continue
+
+                for layout_file in layouts:
+                    if _re.search(plate_type["regex"], layout_file) is None:
+                        continue
+
+                    for et in error_types:
+                        # Original notebook iterates range(1, 2) — i.e. only lost_rows=1.
+                        for lost_rows in range(1, 2):
+                            limits = [{"from": 16 - lost_rows, "to": 16}]
+                            for limit in limits:
+                                abs_results, rel_results, plate_residuals = _run_one_plate(
+                                    plate_type=plate_type,
+                                    layout_file=layout_file,
+                                    plate_content=plate_content.copy(),
+                                    et=et,
+                                    current_e=current_e,
+                                    compounds=compounds,
+                                    concentrations=concentrations,
+                                    replicates=replicates,
+                                    limit=limit,
+                                    df_params=df_params,
+                                    expected_noise=expected_noise,
+                                )
+                                np.savetxt(abs_f, abs_results.T, delimiter=",", fmt="%s")
+                                np.savetxt(rel_f, rel_results.T, delimiter=",", fmt="%s")
+                                np.savetxt(res_f, plate_residuals.T, delimiter=",", fmt="%s")

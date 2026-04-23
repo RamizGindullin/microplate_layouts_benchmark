@@ -15,6 +15,13 @@ import statistics
 from moepy import lowess
 from scipy.interpolate import interp1d
 from benchmark_common import (
+    DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
+    DOSE_RESPONSE_LAYOUT_ORDER,
+    DOSE_RESPONSE_LAYOUT_SPECS,
+    SCREENING_LAYOUT_BOX_PAIRS,
+    SCREENING_LAYOUT_ORDER,
+    SCREENING_LAYOUT_SPECS,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,14 +65,6 @@ def _classify_screening_layout_series(layout_series):
             "benchmark_common.SCREENING_LAYOUT_SPECS into result CSVs."
         )
     return layout_series.map(_map)
-
-    DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
-    DOSE_RESPONSE_LAYOUT_ORDER,
-    DOSE_RESPONSE_LAYOUT_SPECS,
-    SCREENING_LAYOUT_BOX_PAIRS,
-    SCREENING_LAYOUT_ORDER,
-    SCREENING_LAYOUT_SPECS,
-)
 
 
 

@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Dict, Any
+from typing import Callable, List, Dict, Any, Optional
 import os
-
-import libraries.normalization as nrm
 
 
 DILUTION_BY_CONCENTRATIONS = {
@@ -27,23 +25,48 @@ def fig_dir_str(path: Path) -> str:
     return str(path) + os.sep
 
 
+def _default_error_correction() -> Callable:
+    """Return the default plate-normalisation function.
+
+    The import is deferred to this function so that benchmark_common.py does not
+    import libraries.normalization at module load time.  This breaks the circular
+    import chain:
+
+        normalization → utilities → benchmark_common → normalization  ✗
+
+    Callers that need the default should use this helper instead of storing the
+    function object directly in the dataclass default.
+    """
+    import libraries.normalization as nrm  # noqa: PLC0415
+    return nrm.normalize_plate_lowess_2d
+
+
 @dataclass(frozen=True)
 class LayoutSpec:
     key: str
     display_type: str
     layout_dir: str
     regex_template: str
-    error_correction: Callable = nrm.normalize_plate_lowess_2d
-    color: str = ""  # plot colour for this layout (used in ROC/PR/scatter figures)
+    # None means "use _default_error_correction() at call time".
+    # Storing an explicit callable overrides the default.
+    error_correction: Optional[Callable] = None
+    color: str = ""           # plot colour for this layout (ROC/PR/scatter figures)
+    plot_order: int = 0       # used for sorted() calls in LaTeX table generation
     requires_layout_update: bool = False  # True for layouts (e.g. COMPD) that need
                                           # update_compd_layout() applied after loading
+
+    def _resolved_error_correction(self) -> Callable:
+        """Return the error-correction callable, resolving the default lazily."""
+        if self.error_correction is not None:
+            return self.error_correction
+        return _default_error_correction()
 
     def as_dict(self, **fmt: Any) -> Dict[str, Any]:
         return {
             "type": self.display_type,
             "dir": self.layout_dir,
             "regex": self.regex_template.format(**fmt),
-            "error_correction": self.error_correction,
+            "error_correction": self._resolved_error_correction(),
             "requires_layout_update": self.requires_layout_update,
         }
 
@@ -55,18 +78,21 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_COMPD_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         requires_layout_update=True,
+        plot_order=0,
     ),
     LayoutSpec(
         key="plaid",
         display_type="PLAID",
         layout_dir="layouts/compounds_PLAID_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+        plot_order=1,
     ),
     LayoutSpec(
         key="random",
         display_type="Random",
         layout_dir="layouts/compounds_manual_layouts/",
         regex_template=r"plate_layout_rand_(.+?).npy",
+        plot_order=2,
     ),
 ]
 
@@ -78,6 +104,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/screening_RANDM_layouts/",
         regex_template=r"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#59296e",
+        plot_order=0,
     ),
     LayoutSpec(
         key="plaid",
@@ -85,6 +112,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/screening_PLAID_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#cc0253",
+        plot_order=1,
     ),
     LayoutSpec(
         key="compd",
@@ -92,6 +120,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/screening_COMPD_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#e68302",
+        plot_order=2,
     ),
 ]
 
@@ -113,7 +142,7 @@ def screening_plate_types(neg_controls: int, pos_controls: int):
                 neg_controls=neg_controls,
                 pos_controls=pos_controls,
             ),
-            "error_correction": spec.error_correction,
+            "error_correction": spec._resolved_error_correction(),
         }
         for spec in SCREENING_LAYOUT_SPECS
     ]

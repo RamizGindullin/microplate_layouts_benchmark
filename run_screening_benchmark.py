@@ -42,9 +42,9 @@ from benchmark_common import (
 validate_layout_registry_consistency()
 
 SCREENING_PANEL_CASES = [
-    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv", 450),
-    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", 450),
-    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.03-pna-0.99{today_tag}.csv", 450),
+    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 450),  # mild
+    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  450),  # moderate
+    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  450),  # strong
 ]
 
 SCREENING_ROC_PR_CASES = [
@@ -105,7 +105,7 @@ class ScreeningConfig:
         default_factory=lambda: [(8, 8), (10, 10), (20, 10)]
     )
     error_strength_list: List[float] = field(
-        default_factory=lambda: [0.03, 0.06, 0.1, 0.2]
+        default_factory=lambda: [0.06, 0.1, 0.2]
     )
     hit_rate_list: List[float] = field(
         default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
@@ -406,14 +406,14 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
 
     # Mapping between display label and simulation error level:
     #
-    #   fig_name label | simulation error_strength | interpretation
-    #   "0.03"         | 0.03                      | very mild bowl effect
-    #   "0.06"         | 0.1                        | mild bowl effect
-    #   "0.08"         | 0.2                        | moderate bowl effect
+    #   fig_name label | simulation error_strength  | interpretation
+    #   "0.03"         | 0.06                       | mild bowl effect
+    #   "0.06"         | 0.1                        | moderate bowl effect
+    #   "0.08"         | 0.2                        | strong bowl effect
     #
     # The display labels follow the naming convention in the PLAID article
     # (Zhang 2008/2011 references), where mild ≈ 0.06 and strong ≈ 0.2
-    # (see PLAID article §Methods). The simulation sweeps [0.03, 0.06, 0.1, 0.2];
+    # (see PLAID article §Methods). The simulation sweeps [0.06, 0.1, 0.2];
     # the "0.06" figure uses simulation error=0.1 because visually that produces
     # the "mild" appearance described in the paper caption.
     # DO NOT change the CSV filenames without regenerating all screening data.

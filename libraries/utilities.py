@@ -393,15 +393,15 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     ## Plotting
     if fig_type == "relic50":
         relic50_palette = ["#91d1c2", "#00A087", "#236e56"] #"#3bccaa", 
-        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=relic50_palette)
+        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=relic50_palette, legend=False)
         plt.ylabel("Mean absolute log10 difference", fontsize = 10)
                
     elif fig_type == "absic50":
-        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette='YlOrBr')
+        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette='YlOrBr', legend=False)
         plt.ylabel("Mean absolute log10 difference", fontsize = 10)
         
     else:
-        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu")#, palette='YlOrBr')
+        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu", legend=False)#, palette='YlOrBr')
         plt.ylabel("Mean absolute d difference", fontsize = 10)
         fig_type = "d_diff"
         
@@ -678,7 +678,7 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     sns.set_theme(style="whitegrid")
 
     if palette is None:
-        palette = sns.color_palette("Greens",5)
+        palette = sns.color_palette("Greens",len(order))
 
     fig, ax = plt.subplots(figsize=(4,3))
     
@@ -687,8 +687,7 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     if y_max:
         ax.set_ylim(top = y_max)
 
-
-    ax = sns.barplot(x='layout', y="MSE", data=results_df, palette=palette, order=order)
+    ax = sns.barplot(x='layout', y="MSE", data=results_df, hue="layout", palette=palette, order=order, legend=False)
     plt.tick_params(axis='both', which='major', labelsize=10)
     plt.ylabel("MSE", fontsize = 10)
 

@@ -11,7 +11,8 @@ Stages
   simulate : generate screening_scores_data-*.csv and screening-residuals-*.csv
   figures  : generate screening panels and ROC/PR plots
   metrics  : generate SSMD/Z' plots
-  all      : simulate → figures → metrics  (default)
+  tables:  : generate LaTex tables
+  all      : from simulate to figures to metrics to tables (default)
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import csv
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
@@ -517,27 +519,17 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
 
 def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> None:
     ensure_dir(cfg.metrics_plots_dir)
-
+    
     data_directory = str(cfg.metrics_data_dir) + os.sep
     plots_directory = str(cfg.metrics_plots_dir) + os.sep
-
+    
     box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     order = SCREENING_LAYOUT_ORDER
 
-    for fname in output_files:
-        for metric in ("Zfactor", "SSMD"):
-            util.plotting_residual_metrics(
-                data_directory + fname,
-                metric=metric,
-                fig_name=fname,
-                y_max=None,
-                palette=None,
-                plots_directory=plots_directory,
-                box_pairs=box_pairs,
-                order=order,
-            )
-
-    manuscript_fname = f"screening_metrics_data-10-10-0.06-{cfg.run_tag}-{cfg.metrics_id_text}.csv"
+    manuscript_fname = next(
+        f for f in output_files
+        if re.search(r"10-10-0\.06", f)
+    )
     for metric in ("Zfactor", "SSMD"):
         util.plotting_residual_metrics(
             data_directory + manuscript_fname,
@@ -548,29 +540,23 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
             box_pairs=box_pairs, order=order,
         )
 
-    for neg_controls, pos_controls in cfg.neg_pos_controls_list:
-        for i in range(0, 26):
-            error = i / 100.0
-            fname = (
-                f"screening_metrics_data-{neg_controls}-{pos_controls}-"
-                f"{error}-{cfg.run_tag}-{cfg.metrics_id_text}.csv"
-            )
-            util.plotting_residual_metrics(
-                data_directory + fname,
-                metric="Zfactor",
-                fig_name=fname,
-                y_max=0.04, palette=None,
-                plots_directory=plots_directory,
-                box_pairs=box_pairs, order=order,
-            )
-            util.plotting_residual_metrics(
-                data_directory + fname,
-                metric="SSMD",
-                fig_name=fname,
-                y_max=45, palette=None,
-                plots_directory=plots_directory,
-                box_pairs=box_pairs, order=order,
-            )
+    for fname in output_files:
+        util.plotting_residual_metrics(
+            data_directory + fname,
+            metric="Zfactor",
+            fig_name=fname,
+            y_max=0.04, palette=None,
+            plots_directory=plots_directory,
+            box_pairs=box_pairs, order=order,
+        )
+        util.plotting_residual_metrics(
+            data_directory + fname,
+            metric="SSMD",
+            fig_name=fname,
+            y_max=45, palette=None,
+            plots_directory=plots_directory,
+            box_pairs=box_pairs, order=order,
+        )
 
 
 def run_metrics(cfg: ScreeningConfig) -> None:
@@ -689,10 +675,10 @@ def parse_args() -> argparse.Namespace:
         default="all",
         help=(
             "simulate: generate CSVs; "
-            "figures: generate screening/ROC/PR plots; "
-            "metrics: generate SSMD/Z' plots; "
-            "table: generate LaTeX AUC table; "
-            "all: simulate → figures → metrics → table"
+            "figures:  generate screening/ROC/PR plots; "
+            "metrics:  generate SSMD/Z' plots; "
+            "tables:   generate LaTeX AUC tables; "
+            "all:      from simulate to figures to metrics to tables"
         ),
     )
     return parser.parse_args()
@@ -708,7 +694,7 @@ def main() -> None:
         generate_screening_figures(cfg)
     if args.stage in ("metrics", "all"):
         run_metrics(cfg)
-    if args.stage in ("table", "all"):
+    if args.stage in ("tables", "all"):
         generate_auc_latex_table(cfg)
 
 

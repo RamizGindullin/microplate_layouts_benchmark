@@ -246,10 +246,10 @@ def normalize_plate_lowess_deprecated(plate_array, layout, neg_control_id=None, 
     num_rows, num_columns = plate_array.shape
 
     plate_df = pd.DataFrame(plate_array)
-    intensity_df = plate_df.stack().reset_index()
+    intensity_df = plate_df.stack(future_stack=True).reset_index()
     intensity_df.columns = ["Rows", "Columns", "Intensity"]
 
-    controls_df = pd.DataFrame(layout).stack().reset_index()
+    controls_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     controls_df.columns = ["Rows", "Columns", "Type"]
 
     y_adjusted = pd.merge(intensity_df, controls_df, how='left', on=['Rows', 'Columns'])
@@ -315,7 +315,7 @@ def normalize_plate_lowess_2d(plate_array_in, layout, neg_control_id, min_dist=N
     intensity_df = plate_df.stack(future_stack=True).reset_index()
     intensity_df.columns = ["Rows", "Columns", "Intensity"]
 
-    controls_df = pd.DataFrame(layout).stack().reset_index()
+    controls_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     controls_df.columns = ["Rows", "Columns", "Type"]
 
     y_adjusted = pd.merge(intensity_df, controls_df, how='left', on=['Rows', 'Columns'])
@@ -362,10 +362,10 @@ def normalize_plate_linear(plate_array_in, layout, neg_control_id, min_dist=None
     num_rows, num_columns = plate_array.shape
 
     plate_df = pd.DataFrame(plate_array)
-    intensity_df = plate_df.stack().reset_index()
+    intensity_df = plate_df.stack(future_stack=True).reset_index()
     intensity_df.columns = ["Rows", "Columns", "Intensity"]
 
-    types_df = pd.DataFrame(layout).stack().reset_index()
+    types_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     types_df.columns = ["Rows", "Columns", "Type"]
 
     y_adjusted = pd.merge(intensity_df, types_df, how='left', on=['Rows', 'Columns'])

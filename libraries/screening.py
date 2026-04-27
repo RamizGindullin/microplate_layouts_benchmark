@@ -61,42 +61,6 @@ def fill_plate(layout, neg_control_id, pos_control_id, neg_control_mean = 95, po
     return np.abs(plate), activity_layout
 
 
-
-#if (layout[row_index][col_index] == neg_control_id) or (layout[row_index][col_index] <= percent_non_active*(neg_control_id-2)):
-#                 plate[row_index][col_index] = np.random.normal(neg_control_mean, neg_stdev)
- #           else:
-  #               plate[row_index][col_index] = np.random.normal(pos_control_mean, pos_stdev)
-
-
-def screen(layout_dir,layout_file,neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,error_function,error,normalization_function,percent_non_active=0.66,min_dist=0,lose_from_row=0,lose_to_row=0):
-    
-    layout = np.load(layout_dir+layout_file)    
-
-    # Fill plate
-    plate = fill_plate(layout, neg_control_mean, pos_control_mean, neg_stdev, pos_stdev, percent_non_active)
-    
-    # Add errors
-    plate = error_function(plate, error)
-    
-    plate = dt.lose_rows(plate, lose_from_row, lose_to_row)
-    
-    # Fix errors
-    neg_control_locations = util.get_controls_layout(layout.astype(np.float32))
-    neg_control_locations = dt.lose_rows(neg_control_locations, lose_from_row, lose_to_row)
-    layout = dt.lose_rows(layout, lose_from_row, lose_to_row)
-    
-    plate = normalization_function(plate,neg_control_locations,min_dist=min_dist)
-    
-    neg_control_mean, pos_control_mean, neg_stdev, pos_stdev = control_stats(plate, layout)
-        
-    ssmd = ssmd(neg_control_mean, pos_control_mean, neg_stdev, pos_stdev)
-    zfactor = zfactor(neg_control_mean, pos_control_mean, neg_stdev, pos_stdev)
-    
-    return ssmd, zfactor
-
-
-
-
 def place_active_compounds(layout, neg_control_id, pos_control_id, percent_non_active):
     num_rows, num_columns = layout.shape
         

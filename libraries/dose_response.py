@@ -136,6 +136,7 @@ def fit_data(
 
             try:
                 if neg_control_values is None:
+                    lgnd.legend_handles[2].set_sizes([30])
                     fit_coefs, _ = opt.curve_fit(
                         ll4,
                         group.dose,
@@ -471,9 +472,9 @@ def mean_controls(plate_array, layout, control_id):
     if control_locations.sum() < 1:
         return float("nan")
 
-    plate_df = pd.DataFrame(plate_array).stack().reset_index()
+    plate_df = pd.DataFrame(plate_array).stack(future_stack=True)future_stack=True.reset_index()
     plate_df.columns = ["Rows", "Columns", "Intensity"]
-    controls_df = pd.DataFrame(layout).stack().reset_index()
+    controls_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     controls_df.columns = ["Rows", "Columns", "Type"]
     data = pd.merge(plate_df, controls_df, how="left", on=["Rows", "Columns"])
     return data.loc[data["Type"] == control_id, ["Intensity"]].to_numpy().reshape((-1,))

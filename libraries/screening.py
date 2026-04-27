@@ -126,9 +126,9 @@ def plate_metrics(plate, layout, neg_control_id, pos_control_id):
 
 
 # Returns the filename
-def test_quality_assessment_metrics(plate_types,error_types,error,id_text,neg_controls,pos_controls,neg_control_mean,pos_control_mean,neg_stdev,pos_stdev,data_directory):
+def test_quality_assessment_metrics(plate_types,error_types,error,id_text,neg_controls,pos_controls,neg_control_mean,pos_control_mean,neg_stdev,pos_stdev,data_directory,run_tag=None):
     ## Results
-    today = (date.today()).strftime("%Y%m%d")+"-"+id_text
+    today = run_tag if run_tag is not None else (date.today()).strftime("%Y%m%d")+"-"+id_text
     screening_scores_data_filename = 'screening_metrics_data-'+str(neg_controls)+'-'+str(pos_controls)+'-'+str(error)+'-'+today+'.csv'
     screening_scores_data_f=open(data_directory+screening_scores_data_filename,'a')
 
@@ -171,7 +171,7 @@ def test_quality_assessment_metrics(plate_types,error_types,error,id_text,neg_co
                 ssmd_plate, zfactor_plate = plate_metrics(plate, layout, neg_control_id, pos_control_id)
                 
                 ### Write to file!
-                scores_writer.writerow([layout_file, plate_type['type'], et['type'], error, zfactor_expected, ssmd_expected, zfactor_plate, ssmd_plate])
+                scores_writer.writerow([layout_file, plate_type['display_type'], et['type'], error, zfactor_expected, ssmd_expected, zfactor_plate, ssmd_plate])
                #print([layout_file, plate_type['type'], et['type'], error, zfactor_expected, ssmd_expected, zfactor_plate, ssmd_plate])
 
 

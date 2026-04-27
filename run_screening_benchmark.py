@@ -671,7 +671,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stage",
-        choices=["simulate", "figures", "metrics", "table", "all"],
+        choices=["simulate", "figures", "metrics", "tables", "all"],
         default="all",
         help=(
             "simulate: generate CSVs; "

@@ -667,7 +667,7 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 
     frames = []
     for layout_name in order:
-        sub = screening_scores_df[screening_scores_df['display_type'] == layout_name.lower()]
+        sub = screening_scores_df[screening_scores_df['display_type'].str.lower() == layout_name.lower()]
         mse_df = pd.DataFrame(
             np.square(sub[metric + '_expected'] - sub[metric]), columns=['MSE']
         )

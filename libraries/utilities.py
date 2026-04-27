@@ -655,19 +655,19 @@ def plate_to_border_layout(layout, activity_layout, num_neg_controls, num_pos_co
 
 def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', fig_name=None, y_min=None, y_max=None, palette=None, plots_directory='', box_pairs=SCREENING_LAYOUT_BOX_PAIRS, order=SCREENING_LAYOUT_ORDER):
     print(screening_scores_data_filename)
+    
     screening_scores_df = pd.read_csv(screening_scores_data_filename)
+    # Drop any rows where display_type is the literal header string (repeated header rows)
+    screening_scores_df = screening_scores_df[screening_scores_df['display_type'] != 'display_type']
+    # Normalise capitalisation to match SCREENING_LAYOUT_ORDER
+    screening_scores_df['display_type'] = screening_scores_df['display_type'].str.strip()
 
     screening_scores_df[metric+'_expected'] = pd.to_numeric(screening_scores_df[metric+'_expected'], errors='coerce')
     screening_scores_df[metric] = pd.to_numeric(screening_scores_df[metric], errors='coerce')
 
-    results_df = pd.DataFrame(np.square(screening_scores_df[screening_scores_df['display_type'] == order[0]][metric+'_expected'] - 
-                                        screening_scores_df[screening_scores_df['display_type'] == order[0]][metric]),
-                              columns = ['MSE'])
-    results_df.insert(0, 'layout', order[0])
-
     frames = []
     for layout_name in order:
-        sub = screening_scores_df[screening_scores_df['display_type'] == layout_name]
+        sub = screening_scores_df[screening_scores_df['display_type'] == layout_name.lower()]
         mse_df = pd.DataFrame(
             np.square(sub[metric + '_expected'] - sub[metric]), columns=['MSE']
         )
@@ -694,7 +694,6 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 
     #pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
     
-
     annotator = Annotator(ax, pairs=box_pairs, data=results_df, x='layout', y="MSE", order=order)
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', text_offset=-1)
     annotator.apply_and_annotate()

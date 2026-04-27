@@ -781,7 +781,7 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batc
     ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
     ax.tick_params(axis="both", labelsize=8)
     if fig_name:
-        fig.savefig(fig_dir + fig_name, bbox_inches="tight", dpi=300)
+        fig.savefig(os.path.join(fig_dir, fig_name), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
@@ -813,7 +813,7 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batch
     ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
     ax.tick_params(axis="both", labelsize=8)
     if fig_name:
-        fig.savefig(fig_dir + fig_name, bbox_inches="tight", dpi=300)
+        fig.savefig(os.path.join(fig_dir, fig_name), bbox_inches="tight", dpi=300)
     plt.close(fig)
 
 
@@ -892,7 +892,7 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_val
     expected_df = df[df["display_type"] == expected_spec.display_type]
 
     # --- Expected (undistorted) panel ---
-    prefix = fig_dir + "screening-bowl-" + fig_name if fig_name else None
+    prefix = os.path.join(fig_dir, "screening-bowl-" + fig_name) if fig_name else None
     _save_screening_scatter(
         expected_df, "plate_id", "expected_result",
         neg_control_id, pos_control_id,

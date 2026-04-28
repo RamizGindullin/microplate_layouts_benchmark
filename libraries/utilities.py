@@ -66,20 +66,11 @@ def _classify_screening_layout_series(layout_series):
     return layout_series.map(_map)
 
 
-
-
-
-
 def _apply_boxplot_annotations(ax, data, x, y, pairs, order=None, hue=None, hue_order=None, plot='boxplot'):
     annotator = Annotator(ax, pairs, data=data, x=x, y=y, order=order, hue=hue, hue_order=hue_order, plot=plot)
     annotator.configure(test='Mann-Whitney', text_format='star', loc='outside', line_width=1)
     annotator.apply_and_annotate()
     return annotator
-
-
-
-
-
 
 
 def _concat_dose_response_frames(data_1rep, data_2rep, data_3rep, value_name):
@@ -100,35 +91,64 @@ def _coerce_numeric_column(df, column_name):
 
 
 
-def _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep):
+def _stack_replicate_results_frames(replicate_arrays):
+    """Return a single long DataFrame from an iterable of replicate result arrays.
+
+    replicate_arrays should be an iterable of np.ndarray objects with the
+    standard dose-response result columns. The first replicate is labelled 1,
+    the second 2, and so on, regardless of how many are provided.
+    """
     columns = [
         "layout", "compound", "MSE", "error type", "Error", "E", "rows lost",
-        "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"
+        "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e",
     ]
-    frame1 = pd.DataFrame(data_1rep, columns=columns)
-    frame1.insert(0, "replicates", 1)
-    frame2 = pd.DataFrame(data_2rep, columns=columns)
-    frame2.insert(0, "replicates", 2)
-    frame3 = pd.DataFrame(data_3rep, columns=columns)
-    frame3.insert(0, "replicates", 3)
-    df = pd.concat([frame1, frame2, frame3], ignore_index=True)
+    frames = []
+    for idx, arr in enumerate(replicate_arrays, start=1):
+        frame = pd.DataFrame(arr, columns=columns)
+        frame.insert(0, "replicates", idx)
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame(columns=["replicates"] + columns)
+    df = pd.concat(frames, ignore_index=True)
     df["layout"] = _classify_dose_response_layout_series(df["layout"])
     return df
+
+
+def _stack_replicate_residuals_frames(replicate_arrays):
+    """Return a long residuals DataFrame from an iterable of replicate arrays."""
+    columns = [
+        "layout", "error_type", "Error", "E", "rows lost", "residuals",
+        "true_residuals",
+    ]
+    frames = []
+    for idx, arr in enumerate(replicate_arrays, start=1):
+        frame = pd.DataFrame(arr, columns=columns)
+        frame.insert(0, "replicates", idx)
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame(columns=["replicates"] + columns)
+    df = pd.concat(frames, ignore_index=True)
+    df["layout"] = _classify_dose_response_layout_series(df["layout"])
+    df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
+    return df
+
+
+def _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep):
+    """Backward-compatible wrapper using the generic replicate stacker.
+
+    Existing callers provide exactly three replicate arrays; this wrapper keeps
+    that API stable while allowing the internal implementation to support any
+    number of replicates via _stack_replicate_results_frames.
+    """
+    return _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
 
 
 
 def _prepare_dose_response_residuals_frame(residuals_1rep, residuals_2rep, residuals_3rep):
-    columns = ["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"]
-    frame1 = pd.DataFrame(residuals_1rep, columns=columns)
-    frame1.insert(0, "replicates", 1)
-    frame2 = pd.DataFrame(residuals_2rep, columns=columns)
-    frame2.insert(0, "replicates", 2)
-    frame3 = pd.DataFrame(residuals_3rep, columns=columns)
-    frame3.insert(0, "replicates", 3)
-    df = pd.concat([frame1, frame2, frame3], ignore_index=True)
-    df["layout"] = _classify_dose_response_layout_series(df["layout"])
-    df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
-    return df
+    """Backward-compatible wrapper using the generic residuals stacker."""
+    return _stack_replicate_residuals_frames(
+        [residuals_1rep, residuals_2rep, residuals_3rep]
+    )
 
 
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
@@ -157,7 +177,6 @@ def get_controls_layout(layout, neg_control = None):
                 control_layout[row_i][col_i] = 1
 
     return(control_layout)
-
 
 
 def _shape_layout(layout, num_rows, num_columns, size_empty_edge):
@@ -210,9 +229,6 @@ def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
     return duplicates
 
 
-
-
-
 def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, neg_control_id, pos_control_id, order=0, vmin=None, vmax=None, filename=None):    
     ''' Creates the well series plots used for the PLAID bioseminar presentation
     
@@ -256,20 +272,10 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     unstack_df = combined_df[["Rows","Columns","Intensity"]].copy()
     unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
 
-    #if filename:
-     #   plot_plate(unstacked_df, title="Input",filename=filename+'heatmap-before')
-    #else:
-     #   plot_plate(unstacked_df, title="Input")
-    
     
     ### Plot heatmap after normalization
     unstack_adjusted_df = n_combined_df[["Rows","Columns","Intensity"]].copy()
     unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
-    
-  #  if filename:
-   #     plot_plate(unstacked_adjusted_df, title="Normalized",vmin=vmin,vmax=vmax,filename=filename+'heatmap-after')
-    #else:
-     #   plot_plate(unstacked_adjusted_df, title="Normalized",vmin=vmin,vmax=vmax)
     
     
     ### Plotting well series with original and normalized data
@@ -294,7 +300,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     if filename:
         fig.savefig(filename)
     
-    
+
     
 
     
@@ -310,7 +316,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
 
     fig,ax = plt.subplots(figsize=(4,5))
-    palette = ['#4c72b0', '#55a868', '#c44e52']
+    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     sns.boxplot(data=residuals_df, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
     _apply_boxplot_annotations(
         ax,
@@ -327,7 +333,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
 
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fig_dir="", fig_type="", plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -346,18 +352,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
         pvalue_thresholds:
     """    
     
-    results_df = pd.DataFrame(data_1rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-
-    results_df_2rep = pd.DataFrame(data_2rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-
-    results_df_3rep = pd.DataFrame(data_3rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-
-    results_df.insert(0, 'replicates', 1)
-    results_df_2rep.insert(0, 'replicates', 2)
-    results_df_3rep.insert(0, 'replicates', 3)
-
-    results_df = pd.concat([results_df,results_df_2rep])
-    results_df = pd.concat([results_df,results_df_3rep])
+    results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
 
     results_df.MSE = pd.to_numeric(results_df.MSE, errors='coerce')
     results_df.E = pd.to_numeric(results_df.E, errors='coerce')
@@ -370,11 +365,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
-
-    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
-    
     results_df = results_df.sort_values('layout', key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index))
-#df = df.sort_values('A', key=lambda s: s.apply(['July', 'August', 'Sept'].index), ignore_index=True)
 
     fig, ax = plt.subplots(figsize=(4, 3))
 
@@ -394,16 +385,26 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     ## Plotting
     plot_col = "MSE"
     if fig_type == "relic50":
-        relic50_palette = ["#91d1c2", "#00A087", "#236e56"] #"#3bccaa", 
-        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=relic50_palette, legend=False)
-        plt.ylabel("Mean absolute log10 difference", fontsize = 10)
+        # Dose-response layout colours are derived from the registry so adding a new
+        # layout only requires updating DOSE_RESPONSE_LAYOUT_SPECS.
+        palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
+        ax = sns.barplot(
+            x='replicates',
+            y="MSE",
+            data=results_df[results_df['MSE'] != np.inf],
+            hue="layout",
+            hue_order=hue_order,
+            palette=palette,
+            legend=False,
+        )
+        plt.ylabel("Mean absolute log10 difference", fontsize=10)
 
     elif fig_type == "absic50":
         ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette='YlOrBr', legend=False)
         plt.ylabel("Mean absolute log10 difference", fontsize = 10)
 
     else:
-        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu", legend=False)#, palette='YlOrBr')
+        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu", legend=False)
         plt.ylabel("Mean absolute d difference", fontsize = 10)
         fig_type = "d_diff"
         plot_col = "diff_d"
@@ -411,17 +412,11 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
 
     plt.legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
 
-    #annotator = Annotator(ax, pairs=[((2,"Random"),(2,"PLAID"))], data=results_df[results_df['MSE']!=np.inf], x='replicates', y="MSE",hue='layout', order=[1,2,3],hue_order=hue_order)
-    #annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
-    #annotator.apply_and_annotate()
-
     plot_data = results_df[results_df["MSE"] != np.inf] if plot_col == "MSE" else results_df
     annotator = Annotator(ax, pairs=box_pairs, data=plot_data, x='replicates', y=plot_col, hue='layout', order=[1,2,3],hue_order=hue_order)
     annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
     annotator.apply_and_annotate()
 
-
-    #plt.legend().set_title(None)
     fig.savefig(fig_dir+"dose-response-"+fig_type+fig_name+".png",bbox_inches='tight',dpi=800)
     plt.close(fig)
     
@@ -447,7 +442,7 @@ def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='',
     comparison_labels = list(hue_order)
 
     fig,ax = plt.subplots(figsize=(3.2,3.2))
-    palette = ['#4c72b0', '#55a868', '#c44e52']
+    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     sns.boxplot(data=low_r2, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
     ax.set_ylim(top=y_max)
@@ -537,9 +532,6 @@ def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table
             
         latex_f.write("\\\\ \n")
     
- #   for row in rows:
-  #      latex_f.write(row['row_name']+" & "+str(round(plaid_description.loc[row['row_id'],column_name],2))+" & "+str(round(random_description.loc[row['row_id'],column_name],2))+" & "+str(round(border_description.loc[row['row_id'],column_name],2))+"\\\\ \n")
-    
     latex_f.write("\\hline \n")
         
     # Close file
@@ -572,12 +564,12 @@ def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filenam
     
     results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
     
-    layouts = DOSE_RESPONSE_LAYOUT_ORDER
+    layouts = [s.display_type for s in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)]
     
-    latex_f.write("\\multirow{4}{*}{"+table_text+"}")
+    latex_f.write("\multirow{4}{*}{" + table_text + "}")
     
-    for layout_1 in range(3):
-        for layout_2 in range(layout_1+1,3):
+    for layout_1 in range(len(layouts)):
+        for layout_2 in range(layout_1 + 1, len(layouts)):
             latex_f.write(" & "+layouts[layout_1]+" -- "+layouts[layout_2])
 
             for rep in range(1,4):
@@ -695,8 +687,6 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     plt.tick_params(axis='both', which='major', labelsize=10)
     plt.ylabel("MSE", fontsize = 10)
 
-    #pvalue_thresholds = [[1e-4, "***"], [1e-2, "**"], [0.05, "*"],[1, "ns"]]
-    
     annotator = Annotator(ax, pairs=box_pairs, data=results_df, x='layout', y="MSE", order=order)
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', text_offset=-1)
     annotator.apply_and_annotate()
@@ -725,8 +715,11 @@ def _load_screening_residuals(residuals_filename):
     return df
 
 
-def _plot_roc_pr_one_layout(ax, df, display_type, color, curve_type, batch):
-    """Compute and plot a single ROC or PR curve; return the AUC string.
+def _plot_roc_pr_all_batches(ax, df, display_type, color, curve_type):
+    """Compute and plot a mean ROC or PR curve averaged across all batches.
+
+    Each batch curve is interpolated onto a shared grid, then the mean and
+    +/-1-std band are drawn. The legend label reports the mean AUC +/- std.
 
     Args:
         ax: matplotlib Axes to plot onto.
@@ -734,29 +727,47 @@ def _plot_roc_pr_one_layout(ax, df, display_type, color, curve_type, batch):
         display_type: layout label to select rows.
         color: line colour string.
         curve_type: "roc" or "pr".
-        batch: integer batch index to select.
 
     Returns:
-        Legend label string including the AUC value.
+        Legend label string including mean AUC value +/- std.
     """
-    sub = df[(df["display_type"] == display_type) & (df["batch"] == batch)]
-    y_true = sub["activity"].to_numpy()
-    y_score = sub["obtained_result_inv"].to_numpy()
+    sub = df[df["display_type"] == display_type]
+    grid = np.linspace(0, 1, 200)
+    interp_curves = []
+    auc_vals = []
 
-    if curve_type == "roc":
-        fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
-        auc_val = metrics.roc_auc_score(y_true, y_score)
-        ax.plot(fpr, tpr, color=color)
-    else:
-        precision, recall, _ = metrics.precision_recall_curve(y_true, y_score)
-        auc_val = metrics.auc(recall, precision)
-        ax.plot(recall, precision, color=color)
+    for _batch_id, grp in sub.groupby("batch"):
+        y_true = grp["activity"].to_numpy()
+        y_score = grp["obtained_result_inv"].to_numpy()
+        if len(np.unique(y_true)) < 2:
+            continue
 
-    return f"{display_type} (AUC = {round(auc_val, 2)})"
+        if curve_type == "roc":
+            fpr, tpr, _ = metrics.roc_curve(y_true, y_score)
+            auc_vals.append(metrics.roc_auc_score(y_true, y_score))
+            interp_curves.append(np.interp(grid, fpr, tpr))
+        else:
+            precision, recall, _ = metrics.precision_recall_curve(y_true, y_score)
+            auc_vals.append(metrics.auc(recall, precision))
+            # precision_recall_curve returns decreasing recall; reverse for interp
+            interp_curves.append(np.interp(grid, recall[::-1], precision[::-1]))
 
 
-def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
-    """Plot ROC curves for all layouts defined in SCREENING_LAYOUT_SPECS.
+    curves = np.array(interp_curves)
+    mean_curve = curves.mean(axis=0)
+    std_curve = curves.std(axis=0)
+    mean_auc = float(np.mean(auc_vals))
+    std_auc = float(np.std(auc_vals))
+
+    ax.plot(grid, mean_curve, color=color)
+    ax.fill_between(grid, mean_curve - std_curve, mean_curve + std_curve,
+                    color=color, alpha=0.15)
+
+    return f"{display_type} (AUC = {mean_auc:.2f} \u00b1 {std_auc:.2f})"
+
+
+def plot_roc_curves(residuals_filename, fig_name=None, fig_dir=''):
+    """Plot mean ROC curves (± 1-std band) across all batches for every layout.
 
     Layout order, display labels, and colours are driven by the registry so
     adding a new layout requires only a change to SCREENING_LAYOUT_SPECS.
@@ -765,18 +776,14 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batc
         residuals_filename: path to the screening residuals CSV.
         fig_name: output filename (saved to fig_dir); skipped if None.
         fig_dir: directory prefix for the saved figure.
-        batch: integer batch index to plot.
-        batches: total number of batches (unused; retained for API compatibility).
     """
-    # Colours aligned with SCREENING_LAYOUT_SPECS order: Random, PLAID, COMPD.
     layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
-
     df = _load_screening_residuals(residuals_filename)
 
     fig, ax = plt.subplots(figsize=(3, 2))
     legend_labels = []
     for spec, color in zip(SCREENING_LAYOUT_SPECS, layout_colors):
-        label = _plot_roc_pr_one_layout(ax, df, spec.display_type, color, "roc", batch)
+        label = _plot_roc_pr_all_batches(ax, df, spec.display_type, color, "roc")
         legend_labels.append(label)
 
     ax.set_ylabel("True Positive Rate", fontsize=10)
@@ -788,8 +795,8 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batc
     plt.close(fig)
 
 
-def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batches=10):
-    """Plot Precision-Recall curves for all layouts defined in SCREENING_LAYOUT_SPECS.
+def plot_pr_curves(residuals_filename, fig_name=None, fig_dir=''):
+    """Plot mean Precision-Recall curves (+/- 1-std band) across all batches.
 
     Layout order, display labels, and colours are driven by the registry so
     adding a new layout requires only a change to SCREENING_LAYOUT_SPECS.
@@ -798,17 +805,14 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', batch=0, batch
         residuals_filename: path to the screening residuals CSV.
         fig_name: output filename (saved to fig_dir); skipped if None.
         fig_dir: directory prefix for the saved figure.
-        batch: integer batch index to plot.
-        batches: total number of batches (unused; retained for API compatibility).
     """
     layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
-
     df = _load_screening_residuals(residuals_filename)
 
     fig, ax = plt.subplots(figsize=(3, 2))
     legend_labels = []
     for spec, color in zip(SCREENING_LAYOUT_SPECS, layout_colors):
-        label = _plot_roc_pr_one_layout(ax, df, spec.display_type, color, "pr", batch)
+        label = _plot_roc_pr_all_batches(ax, df, spec.display_type, color, "pr")
         legend_labels.append(label)
 
     ax.set_ylabel("Precision", fontsize=10)
@@ -828,16 +832,7 @@ def pr_auc_score(y_true, y_score):
 
 
 def _scatter_sample_groups(ax, df, x_col, y_col, neg_control_id, pos_control_id, s=14):
-    """Draw four overlaid scatterplots for the four sample/control groups.
-
-    Groups (in draw order so controls are on top):
-      1. Negative samples (activity < 1, not a control)
-      2. Negative controls
-      3. Positive samples (active, not a control)
-      4. Positive controls
-
-    Returns the axes object (same as input ax).
-    """
+    """Draw four overlaid scatterplots for the four sample/control groups."""
     neg_samples   = df[(df["activity"] < 1) & (df["comp_id"] != neg_control_id) & (df["comp_id"] != pos_control_id)]
     neg_controls  = df[df["comp_id"] == neg_control_id]
     pos_samples   = df[(df["activity"] > 0) & (df["comp_id"] < pos_control_id)]
@@ -869,18 +864,7 @@ def _save_screening_scatter(df, x_col, y_col, neg_control_id, pos_control_id,
 
 
 def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_value=300):
-    """Plot per-layout screening scatter figures driven by SCREENING_LAYOUT_SPECS.
-
-    Produces one figure per layout (obtained_result vs plate_id) plus one
-    additional "expected" figure using PLAID data and expected_result.
-    Output filenames are:
-      - screening-bowl-<fig_name>-expected.png        (PLAID expected values)
-      - screening-bowl-<fig_name>-<key>.png           (obtained per layout)
-
-    Adding a new layout to SCREENING_LAYOUT_SPECS automatically produces a new
-    output figure; the expected panel always uses the first layout in the spec
-    whose display_type matches the PLAID entry.
-    """
+    """Plot per-layout screening scatter figures driven by SCREENING_LAYOUT_SPECS."""
     df = _load_screening_residuals(residuals_filename)
 
     sns.set_theme(style="whitegrid")
@@ -889,12 +873,9 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_val
     pos_control_id = neg_control_id - 1
     min_value = float(df["obtained_result"].min()) - 10
 
-    # Determine which layout to use for the "expected" reference panel.
-    # By convention this is PLAID (the first registry entry with display_type=="PLAID").
     expected_spec = next(s for s in SCREENING_LAYOUT_SPECS if s.display_type == "PLAID")
     expected_df = df[df["display_type"] == expected_spec.display_type]
 
-    # --- Expected (undistorted) panel ---
     prefix = os.path.join(fig_dir, "screening-bowl-" + fig_name) if fig_name else None
     _save_screening_scatter(
         expected_df, "plate_id", "expected_result",
@@ -903,7 +884,6 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_val
         filepath=prefix + "-expected.png" if prefix else None,
     )
 
-    # --- Per-layout obtained-result panels ---
     for spec in SCREENING_LAYOUT_SPECS:
         layout_df = df[df["display_type"] == spec.display_type]
         _save_screening_scatter(
@@ -917,34 +897,21 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     
     plate_df = pd.DataFrame(plate_array)
     
-    intensity_df = plate_df.stack(future_stack=True).reset_index() ##
-    intensity_df.columns = ["Rows","Columns","Intensity"] ##
+    intensity_df = plate_df.stack(future_stack=True).reset_index()
+    intensity_df.columns = ["Rows","Columns","Intensity"]
     
-    types_df = pd.DataFrame(layout).stack(future_stack=True).reset_index() ##
-    types_df.columns = ["Rows","Columns","Type"] ##
+    types_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
+    types_df.columns = ["Rows","Columns","Type"]
     
-    combined_df = pd.merge(intensity_df, types_df,  how='left', on=['Rows','Columns']) ##
-    
-    
-    #### Test unstack
+    combined_df = pd.merge(intensity_df, types_df,  how='left', on=['Rows','Columns'])
     
     unstack_df = combined_df[["Rows","Columns","Intensity"]].copy()
-    
     unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
-    
     plot_plate(unstacked_df, title="Input",filename=filename+'heatmap-before')
     
-    ####
-        
-    ## Before ###
-    
     y_adjusted = combined_df.copy()
-    y_adjusted.reset_index() ##
+    y_adjusted.reset_index()
     
-    
-    ## CALL NORM
-    
-    ### Adjust rows
     lowess_rows_model = lowess.Lowess()
     lowess_rows_model.fit(y_adjusted[y_adjusted.Type==neg_control_id].Rows.to_numpy(),y_adjusted[y_adjusted.Type==neg_control_id].Intensity.to_numpy(),frac=1,num_fits=5000)
 
@@ -954,31 +921,23 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     y_adjusted.loc[y_adjusted['Type']>0, ['Intensity']] -= y_pred_rows[y_adjusted.loc[y_adjusted['Type']>0,['Rows']]] 
     y_adjusted.loc[y_adjusted['Type']>0, ['Intensity']] += np.nanmean(y_pred_rows)
     
-    # Model fitting Columns
     lowess_model = lowess.Lowess()
     lowess_model.fit(y_adjusted[y_adjusted.Type==neg_control_id].Columns.to_numpy(),y_adjusted[y_adjusted.Type==neg_control_id].Intensity.to_numpy(),frac=1,num_fits=5000)
 
     xnew = np.array([i for i in range(0,24)])
-
     y_pred = lowess_model.predict(xnew)
 
-    
     y_adjusted.loc[y_adjusted['Type']>0, ['Intensity']] -= y_pred[y_adjusted.loc[y_adjusted['Type']>0,['Columns']]] 
     y_adjusted.loc[y_adjusted['Type']>0, ['Intensity']] += np.nanmean(y_pred)
     
-    
     fig, ax = plt.subplots(figsize=(10,6))
-    
     ax.set(xlim=(0,25))
     ax = sns.regplot(data=combined_df[(combined_df.Type!=pos_control_id) & (combined_df.Type!=neg_control_id)], x="Columns", y="Intensity", x_jitter=0.3, fit_reg=False, scatter_kws={"color":"orange","alpha":0.3})
     ax = sns.regplot(data=combined_df[combined_df.Type==pos_control_id], x="Columns", y="Intensity", x_jitter=0.3, fit_reg=False, marker="+",scatter_kws={"color":"blue"})
     ax = sns.regplot(data=combined_df[combined_df.Type==neg_control_id], x="Columns", y="Intensity", x_jitter=0.3, fit_reg=False, marker='*',scatter_kws={"color":"purple"}, truncate=False, order=order) 
     ax = sns.regplot(data=y_adjusted, x="Columns", y="Intensity", x_jitter=0.3, fit_reg=True, marker='x',scatter_kws={"color":"blue"}, truncate=False, order=order)
     
-    #ax = sns.regplot(data=y_adjusted, x="Columns", y="Intensity", x_jitter=0.3, fit_reg=True, marker='x',scatter_kws={"color":"blue"}, truncate=False, order=order)
-    
     plt.plot(xnew, y_pred, '--', label='Estimate', color='k', zorder=3)
-    
     ax.set_xticks(range(1,25))
     
     if (filename):
@@ -986,21 +945,13 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     plt.close(fig)
         
     unstack_adjusted_df = y_adjusted[["Rows","Columns","Intensity"]].copy()
-    
     unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
     
     return unstacked_adjusted_df.to_numpy()
 
 
 def plot_well_series(*args, **kwargs):
-    """Backward-compatible dispatcher for the two historical plot_well_series APIs.
-
-    Supported call shapes:
-    - plot_well_series(plate_array, norm_plate, layout, neg_control_id, pos_control_id, ...)
-      -> plot_well_series_precomputed_normalization
-    - plot_well_series(plate_array, layout, neg_control_id=-1, pos_control_id=-1, ...)
-      -> plot_well_series_lowess_internal
-    """
+    """Backward-compatible dispatcher for the two historical plot_well_series APIs."""
     if len(args) >= 5:
         return plot_well_series_precomputed_normalization(*args, **kwargs)
     return plot_well_series_lowess_internal(*args, **kwargs)

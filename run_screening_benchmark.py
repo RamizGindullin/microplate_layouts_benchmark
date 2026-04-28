@@ -49,19 +49,22 @@ SCREENING_PANEL_CASES = [
     ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  450),  # strong
 ]
 
+# Each entry: (residuals_file_template, fig_name_suffix).
+# The batch index column has been removed — plot_roc_curves / plot_pr_curves
+# now average over all batches automatically.
 SCREENING_ROC_PR_CASES = [
-    ("screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", "10-10-0.2-1.png", 6),
-    ("screening-residuals-10-10-0.2-pna-0.95{today_tag}.csv", "10-10-0.2-5.png", 9),
-    ("screening-residuals-10-10-0.2-pna-0.9{today_tag}.csv",  "10-10-0.2-10.png", 0),
-    ("screening-residuals-10-10-0.2-pna-0.8{today_tag}.csv",  "10-10-0.2-20.png", 2),
-    ("screening-residuals-10-10-0.2-pna-0.7{today_tag}.csv",  "10-10-0.2-30.png", 6),
-    ("screening-residuals-10-10-0.2-pna-0.6{today_tag}.csv",  "10-10-0.2-40.png", None),
-    ("screening-residuals-8-8-0.1-pna-0.99{today_tag}.csv",   "8-8-0.1-1.png", None),
-    ("screening-residuals-8-8-0.1-pna-0.95{today_tag}.csv",   "8-8-0.1-5.png", 1),
-    ("screening-residuals-8-8-0.1-pna-0.9{today_tag}.csv",    "8-8-0.1-10.png", 6),
-    ("screening-residuals-8-8-0.1-pna-0.8{today_tag}.csv",    "8-8-0.1-20.png", 6),
-    ("screening-residuals-8-8-0.1-pna-0.7{today_tag}.csv",    "8-8-0.1-30.png", 6),
-    ("screening-residuals-8-8-0.1-pna-0.6{today_tag}.csv",    "8-8-0.1-40.png", 3),
+    ("screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", "10-10-0.2-1.png"),
+    ("screening-residuals-10-10-0.2-pna-0.95{today_tag}.csv", "10-10-0.2-5.png"),
+    ("screening-residuals-10-10-0.2-pna-0.9{today_tag}.csv",  "10-10-0.2-10.png"),
+    ("screening-residuals-10-10-0.2-pna-0.8{today_tag}.csv",  "10-10-0.2-20.png"),
+    ("screening-residuals-10-10-0.2-pna-0.7{today_tag}.csv",  "10-10-0.2-30.png"),
+    ("screening-residuals-10-10-0.2-pna-0.6{today_tag}.csv",  "10-10-0.2-40.png"),
+    ("screening-residuals-8-8-0.1-pna-0.99{today_tag}.csv",   "8-8-0.1-1.png"),
+    ("screening-residuals-8-8-0.1-pna-0.95{today_tag}.csv",   "8-8-0.1-5.png"),
+    ("screening-residuals-8-8-0.1-pna-0.9{today_tag}.csv",    "8-8-0.1-10.png"),
+    ("screening-residuals-8-8-0.1-pna-0.8{today_tag}.csv",    "8-8-0.1-20.png"),
+    ("screening-residuals-8-8-0.1-pna-0.7{today_tag}.csv",    "8-8-0.1-30.png"),
+    ("screening-residuals-8-8-0.1-pna-0.6{today_tag}.csv",    "8-8-0.1-40.png"),
 ]
 
 CONTROL_LAYOUT_FIGURE_CASES = [
@@ -427,17 +430,22 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
 
 
 def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
-    """ROC / PR curves. Also prints roc_table_code / pr_table_code to stdout."""
+    """ROC / PR curves averaged over all batches (mean +/- 1-std band)."""
     ensure_dir(cfg.screening_plots_dir)
 
-    for residuals_file_template, fig_name, batch in SCREENING_ROC_PR_CASES:
+    for residuals_file_template, fig_name in SCREENING_ROC_PR_CASES:
         residuals_file = residuals_file_template.format(today_tag=cfg.today_tag)
         residuals_path = cfg.screening_data_dir / residuals_file
-        kwargs = {} if batch is None else {"batch": batch}
-        util.plot_roc_curves(str(residuals_path), "ROC-" + fig_name,
-                             str(cfg.screening_plots_dir), **kwargs)
-        util.plot_pr_curves(str(residuals_path), "PR-" + fig_name,
-                            str(cfg.screening_plots_dir), **kwargs)
+        util.plot_roc_curves(
+            str(residuals_path),
+            "ROC-" + fig_name,
+            str(cfg.screening_plots_dir),
+        )
+        util.plot_pr_curves(
+            str(residuals_path),
+            "PR-" + fig_name,
+            str(cfg.screening_plots_dir),
+        )
 
 
 def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
@@ -578,8 +586,6 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
     pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
     layouts    = SCREENING_LAYOUT_ORDER  # derived from registry
 
-    # Accumulate per-hit-rate results
-    # summary[hit_rate][layout] = {"roc": (mean, std), "pr": (mean, std)}
     summary: dict = {}
 
     for hit_rate, pna in zip(hit_rates, pna_values):
@@ -599,7 +605,6 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
             }
             continue
 
-        # Normalise column names (CSV header written by simulate_condition)
         df.columns = df.columns.str.strip()
 
         summary[hit_rate] = {}
@@ -612,8 +617,6 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
                 }
                 continue
 
-            # Use all batches for statistical summary (the ROC/PR curve plots use a
-            # single selected batch for visual clarity; this table uses all batches).
             roc_aucs, pr_aucs = [], []
             for _batch_id, grp in sub.groupby("batch"):
                 y_true  = (grp["activity"].astype(float) > 0).astype(int)
@@ -630,7 +633,6 @@ def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
                        if pr_aucs  else (float("nan"), float("nan")),
             }
 
-    # Build LaTeX table
     col_labels = (
         [f"{lay} ROC" for lay in layouts]
         + [f"{lay} PR"  for lay in layouts]

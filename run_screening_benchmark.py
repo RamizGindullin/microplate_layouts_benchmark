@@ -160,9 +160,6 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-class _SkipPlate(Exception):
-    """Raised internally to abort processing of one plate and move to the next."""
-
 
 # ---------------------------------------------------------------------------
 # Stage 1: Simulation
@@ -233,153 +230,152 @@ def simulate_condition(
                         layout = np.load(os.path.join(layout_dir, layout_file))
                         neg_control_id = np.max(layout)
                         pos_control_id = neg_control_id - 1
-    
-                        for et in cfg.error_types():
-                            for lost_rows in cfg.lost_rows_range:
-                                limit = {"from": 1, "to": lost_rows}
-    
-                                try:
-                                    ideal_plate, activity_layout = sc.fill_plate(
-                                        layout,
-                                        neg_control_id,
-                                        pos_control_id,
-                                        cfg.neg_control_mean,
-                                        pos_control_mean,
-                                        neg_stdev=cfg.neg_stdev,
-                                        pos_stdev=cfg.pos_stdev,
-                                        percent_non_active=percent_non_active,
-                                    )
-    
-                                    (
-                                        exp_neg_mean, exp_pos_mean,
-                                        exp_neg_std, exp_pos_std,
-                                    ) = sc.control_stats(
-                                        ideal_plate, layout,
-                                        neg_control_id, pos_control_id,
-                                    )
-                                    ssmd_expected = sc.ssmd(
-                                        exp_neg_mean, exp_pos_mean,
-                                        exp_neg_std, exp_pos_std,
-                                    )
-                                    zfactor_expected = sc.zfactor(
-                                        exp_neg_mean, exp_pos_mean,
-                                        exp_neg_std, exp_pos_std,
-                                    )
-    
-                                    plate = et["error_function"](ideal_plate, error)
-                                    plate = dt.lose_rows(plate, limit["from"], limit["to"])
-    
-                                    (
-                                        raw_neg_mean, raw_pos_mean,
-                                        raw_neg_std, raw_pos_std,
-                                    ) = sc.control_stats(
-                                        plate, layout, neg_control_id, pos_control_id,
-                                    )
-                                    ssmd_raw = sc.ssmd(
-                                        raw_neg_mean, raw_pos_mean,
-                                        raw_neg_std, raw_pos_std,
-                                    )
-                                    zfactor_raw = sc.zfactor(
-                                        raw_neg_mean, raw_pos_mean,
-                                        raw_neg_std, raw_pos_std,
-                                    )
-    
-                                    remaining_layout = dt.lose_rows(
-                                        layout, limit["from"], limit["to"]
-                                    )
-                                    norm_plate = plate_type.error_correction(
-                                        plate, layout, neg_control_id
-                                    )
-                                    (
-                                        norm_neg_mean, norm_pos_mean,
-                                        norm_neg_std, norm_pos_std,
-                                    ) = sc.control_stats(
-                                        norm_plate, remaining_layout, neg_control_id, pos_control_id,
-                                    )
-                                    ssmd_norm = sc.ssmd(
-                                        norm_neg_mean, norm_pos_mean,
-                                        norm_neg_std, norm_pos_std,
-                                    )
-                                    zfactor_norm = sc.zfactor(
-                                        norm_neg_mean, norm_pos_mean,
-                                        norm_neg_std, norm_pos_std,
-                                    )
-    
-                                except _SkipPlate as exc:
-                                    print(f"WARNING: {exc}")
-                                    continue
-                                except Exception as exc:
-                                    raise _SkipPlate(
-                                        f"Skipping {layout_file} batch={batch} lost_rows={lost_rows}: {exc}"
-                                    ) from exc
-    
-                                scores_writer.writerow([
-                                    batch, plate_type.type, plate_type.display_type, et["type"], error,
-                                    lost_rows - 1,
-                                    exp_neg_mean, exp_pos_mean,
-                                    exp_neg_std, exp_pos_std,
-                                    zfactor_expected, ssmd_expected,
-                                    zfactor_raw, ssmd_raw,
-                                    zfactor_norm, ssmd_norm,
-                                ])
-    
-                                res_array = np.power(
-                                    np.reshape(
-                                        np.abs(
-                                            dt.lose_rows(ideal_plate, limit["from"], limit["to"])
-                                            - plate
-                                        ),
-                                        (-1, 1),
-                                    ),
-                                    2,
-                                )
-                                comp_id_array = np.reshape(remaining_layout, (-1, 1))
-                                ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
-                                norm_plate_array = np.reshape(plate, (-1, 1))
-                                activity_array = np.reshape(activity_layout, (-1, 1))
-    
-                                comp_id_res_df = pd.DataFrame(
-                                    np.hstack([
-                                        comp_id_array, res_array,
-                                        ideal_plate_array, norm_plate_array,
-                                        activity_array,
-                                    ]),
-                                    columns=[
-                                        "comp_type", "res",
-                                        "expected_result", "obtained_result",
-                                        "activity",
-                                    ],
-                                )
-                                comp_id_res_df = comp_id_res_df[comp_id_res_df.comp_type > 0]
-    
-                                rrr = comp_id_res_df.to_numpy().T
-                                _, res_size = rrr.shape
-    
-                                plate_residuals = np.vstack([
-                                    np.full(res_size, batch),
-                                    np.full(res_size, plate_type.type),
-                                    np.full(res_size, plate_type.display_type),
-                                    np.full(res_size, et["type"]),
-                                    np.full(res_size, error),
-                                    np.full(res_size, lost_rows - 1),
-                                    np.full(res_size, exp_neg_mean),
-                                    np.full(res_size, exp_pos_mean),
-                                    np.full(res_size, exp_neg_std),
-                                    np.full(res_size, exp_pos_std),
-                                    rrr,
-                                    np.full(res_size, match.group(2)),
-                                ])
-    
-                                np.savetxt(
-                                    residuals_f,
-                                    plate_residuals.T,
-                                    delimiter=",",
-                                    fmt="%s",
+                    except Exception as exc:
+                        print(f"WARNING: could not load {layout_file!r}: {exc}")
+                        continue
+
+                    for et in cfg.error_types():
+                        for lost_rows in cfg.lost_rows_range:
+                            limit = {"from": 1, "to": lost_rows}
+
+                            try:
+                                ideal_plate, activity_layout = sc.fill_plate(
+                                    layout,
+                                    neg_control_id,
+                                    pos_control_id,
+                                    cfg.neg_control_mean,
+                                    pos_control_mean,
+                                    neg_stdev=cfg.neg_stdev,
+                                    pos_stdev=cfg.pos_stdev,
+                                    percent_non_active=percent_non_active,
                                 )
 
-                    except _SkipPlate as skip_exc:
-                        print(f"WARNING (layout skipped): {skip_exc}")
-                        continue
+                                (
+                                    exp_neg_mean, exp_pos_mean,
+                                    exp_neg_std, exp_pos_std,
+                                ) = sc.control_stats(
+                                    ideal_plate, layout,
+                                    neg_control_id, pos_control_id,
+                                )
+                                ssmd_expected = sc.ssmd(
+                                    exp_neg_mean, exp_pos_mean,
+                                    exp_neg_std, exp_pos_std,
+                                )
+                                zfactor_expected = sc.zfactor(
+                                    exp_neg_mean, exp_pos_mean,
+                                    exp_neg_std, exp_pos_std,
+                                )
+
+                                plate = et["error_function"](ideal_plate, error)
+                                plate = dt.lose_rows(plate, limit["from"], limit["to"])
+
+                                (
+                                    raw_neg_mean, raw_pos_mean,
+                                    raw_neg_std, raw_pos_std,
+                                ) = sc.control_stats(
+                                    plate, layout, neg_control_id, pos_control_id,
+                                )
+                                ssmd_raw = sc.ssmd(
+                                    raw_neg_mean, raw_pos_mean,
+                                    raw_neg_std, raw_pos_std,
+                                )
+                                zfactor_raw = sc.zfactor(
+                                    raw_neg_mean, raw_pos_mean,
+                                    raw_neg_std, raw_pos_std,
+                                )
+
+                                remaining_layout = dt.lose_rows(
+                                    layout, limit["from"], limit["to"]
+                                )
+                                norm_plate = plate_type.error_correction(
+                                    plate, layout, neg_control_id
+                                )
+                                (
+                                    norm_neg_mean, norm_pos_mean,
+                                    norm_neg_std, norm_pos_std,
+                                ) = sc.control_stats(
+                                    norm_plate, remaining_layout, neg_control_id, pos_control_id,
+                                )
+                                ssmd_norm = sc.ssmd(
+                                    norm_neg_mean, norm_pos_mean,
+                                    norm_neg_std, norm_pos_std,
+                                )
+                                zfactor_norm = sc.zfactor(
+                                    norm_neg_mean, norm_pos_mean,
+                                    norm_neg_std, norm_pos_std,
+                                )
+
+                            except Exception as exc:
+                                print(
+                                    f"WARNING: skipping {layout_file!r} "
+                                    f"batch={batch} lost_rows={lost_rows}: {exc}"
+                                )
+                                continue
+
+                            scores_writer.writerow([
+                                batch, plate_type.type, plate_type.display_type, et["type"], error,
+                                lost_rows - 1,
+                                exp_neg_mean, exp_pos_mean,
+                                exp_neg_std, exp_pos_std,
+                                zfactor_expected, ssmd_expected,
+                                zfactor_raw, ssmd_raw,
+                                zfactor_norm, ssmd_norm,
+                            ])
+
+                            res_array = np.power(
+                                np.reshape(
+                                    np.abs(
+                                        dt.lose_rows(ideal_plate, limit["from"], limit["to"])
+                                        - plate
+                                    ),
+                                    (-1, 1),
+                                ),
+                                2,
+                            )
+                            comp_id_array = np.reshape(remaining_layout, (-1, 1))
+                            ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
+                            norm_plate_array = np.reshape(plate, (-1, 1))
+                            activity_array = np.reshape(activity_layout, (-1, 1))
+
+                            comp_id_res_df = pd.DataFrame(
+                                np.hstack([
+                                    comp_id_array, res_array,
+                                    ideal_plate_array, norm_plate_array,
+                                    activity_array,
+                                ]),
+                                columns=[
+                                    "comp_type", "res",
+                                    "expected_result", "obtained_result",
+                                    "activity",
+                                ],
+                            )
+                            comp_id_res_df = comp_id_res_df[comp_id_res_df.comp_type > 0]
+
+                            rrr = comp_id_res_df.to_numpy().T
+                            _, res_size = rrr.shape
+
+                            plate_residuals = np.vstack([
+                                np.full(res_size, batch),
+                                np.full(res_size, plate_type.type),
+                                np.full(res_size, plate_type.display_type),
+                                np.full(res_size, et["type"]),
+                                np.full(res_size, error),
+                                np.full(res_size, lost_rows - 1),
+                                np.full(res_size, exp_neg_mean),
+                                np.full(res_size, exp_pos_mean),
+                                np.full(res_size, exp_neg_std),
+                                np.full(res_size, exp_pos_std),
+                                rrr,
+                                np.full(res_size, Path(layout_file).stem.rsplit("_", 1)[-1]),
+                            ])
+
+                            np.savetxt(
+                                residuals_f,
+                                plate_residuals.T,
+                                delimiter=",",
+                                fmt="%s",
+                            )
+
 
     print("Done:", scores_path.name)
     print("Done:", residuals_path.name)

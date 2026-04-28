@@ -67,9 +67,15 @@ def _load_csv_triple(
             f"{prefix}-{compounds}-{doses}-dil{dilution}-{r}-{error_nl}-"
             f"{cfg.date_tag}{id_text}.csv"
         )
-        result.append(
-            np.loadtxt(cfg.data_dir / fname, delimiter=",", dtype="str")
-        )
+        fpath = cfg.data_dir / fname
+        try:
+            result.append(np.loadtxt(fpath, delimiter=",", dtype="str"))
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(
+                f"Missing CSV for prefix={prefix!r}, doses={doses}, "
+                f"dilution={dilution}, replicates={r}, error_nl={error_nl}, "
+                f"id_text={id_text!r}. Expected: {fpath}"
+            ) from exc
     return result
 
 
@@ -84,12 +90,11 @@ class DoseResponseScenario:
 
     id_text + error_nl determine the CSV filename suffixes written by
     run_simulations and read by the figure-generation stage.
-    label is the suffix used in figure names (supplement notebook).
+    Figure name suffixes are derived from IC50_DMAX_R2_SCENARIO_GROUPS lambdas.
     """
     id_text: str
     error_nl: float
     error_types: List[Dict[str, Any]]
-    label: str
 
 
 @dataclass
@@ -119,8 +124,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_errors_to_right_columns_half,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.2,
-                }],
-                label="half-columns-neg-controls-0.2",
+                }]
             ),
             # NOTE: scenario with id_text="log-neg-control-new-reg" and
             # label="half-columns-neg-controls-0.4-log" was removed — it was a
@@ -135,8 +139,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_errors_to_right_columns_half,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.4,
-                }],
-                label="half-columns-neg-controls-0.4",
+                }]
             ),
             DoseResponseScenario(
                 id_text="curve_info-new-reg",
@@ -146,8 +149,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_bowlshaped_errors_nl,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.055,
-                }],
-                label="bowl-0.055",
+                }]
             ),
             DoseResponseScenario(
                 id_text="bowl-neg-control-new-reg",
@@ -157,8 +159,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_bowlshaped_errors_nl,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.055,
-                }],
-                label="bowl-neg-controls-0.055",
+                }]
             ),
             DoseResponseScenario(
                 id_text="curve_info-new-reg",
@@ -168,8 +169,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_bowlshaped_errors_nl,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.085,
-                }],
-                label="bowl-0.085",
+                }]
             ),
             DoseResponseScenario(
                 id_text="bowl-neg-control-new-reg",
@@ -179,8 +179,7 @@ class DoseResponseConfig:
                     "error_function": dt.add_bowlshaped_errors_nl,
                     "error_correction": nrm.normalize_plate_nearest_control,
                     "error": 0.085,
-                }],
-                label="bowl-neg-controls-0.085",
+                }]
             ),
         ]
     )
@@ -234,9 +233,24 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
 
 
 IC50_DMAX_R2_SCENARIO_GROUPS = [
-    ("curve_info-new-reg", BOWL_ERROR_LEVELS, lambda doses, error_nl: f"bowl-{error_nl}-{doses}-concentrations"),
-    ("bowl-neg-control-new-reg", BOWL_ERROR_LEVELS, lambda doses, error_nl: f"bowl-neg-controls-{error_nl}-{doses}-concentrations"),
-    ("right-half-neg-control-log-new-reg", RIGHT_HALF_ERROR_LEVELS, lambda doses, error_nl: f"half-columns-neg-controls-{error_nl}-{doses}-concentrations"),
+    (
+        "curve_info-new-reg",
+        BOWL_ERROR_LEVELS,
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-{enl}",
+    ),
+    (
+        "bowl-neg-control-new-reg",
+        BOWL_ERROR_LEVELS,
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+    ),
+    (
+        "right-half-neg-control-log-new-reg",
+        RIGHT_HALF_ERROR_LEVELS,
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
+        None,  # no R² figure for right-half
+    ),
 ]
 
 
@@ -310,29 +324,7 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
     cfg.figures_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = fig_dir_str(cfg.figures_dir)
 
-    # Scenarios: (id_text, error_nl values, fig_name_template)
-    scenario_groups = [
-        (
-            "curve_info-new-reg",
-            (0.055, 0.085),
-            lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-            lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-{enl}",
-        ),
-        (
-            "bowl-neg-control-new-reg",
-            (0.055, 0.085),
-            lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-            lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-        ),
-        (
-            "right-half-neg-control-log-new-reg",
-            (0.2, 0.4),
-            lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
-            None,  # no R² figure for right-half
-        ),
-    ]
-
-    for id_text, error_nls, fig_name_fn, r2_fig_name_fn in scenario_groups:
+    for id_text, error_nls, fig_name_fn, r2_fig_name_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
         for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
             for error_nl in error_nls:
                 rel_1, rel_2, rel_3 = _load_csv_triple(

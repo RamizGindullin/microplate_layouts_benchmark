@@ -327,7 +327,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
 
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, box_pairs3=None, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', fig_type='', plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -382,6 +382,9 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
         # * indicates p < 10−4, ** indicates p < 10−12, *** indicates p < 10−43.
         pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]] #[1e-64, "****"], 
 
+    # box_pairs parameter is intentionally not exposed to callers for this function;
+    # the replicate-level pairs are always used so statistical annotations are
+    # consistent across all barplot figures.
     box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
     hue_order = DOSE_RESPONSE_LAYOUT_ORDER
 
@@ -389,20 +392,22 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
         ax.set_ylim(top = y_max)
     
     ## Plotting
+    plot_col = "MSE"
     if fig_type == "relic50":
         relic50_palette = ["#91d1c2", "#00A087", "#236e56"] #"#3bccaa", 
         ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=relic50_palette, legend=False)
         plt.ylabel("Mean absolute log10 difference", fontsize = 10)
-               
+
     elif fig_type == "absic50":
         ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette='YlOrBr', legend=False)
         plt.ylabel("Mean absolute log10 difference", fontsize = 10)
-        
+
     else:
         ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu", legend=False)#, palette='YlOrBr')
         plt.ylabel("Mean absolute d difference", fontsize = 10)
         fig_type = "d_diff"
-        
+        plot_col = "diff_d"
+
 
     plt.legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
 
@@ -410,7 +415,8 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name='', fi
     #annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
     #annotator.apply_and_annotate()
 
-    annotator = Annotator(ax, pairs=box_pairs, data=results_df[results_df['MSE']!=np.inf], x='replicates', y="MSE",hue='layout', order=[1,2,3],hue_order=hue_order)
+    plot_data = results_df[results_df["MSE"] != np.inf] if plot_col == "MSE" else results_df
+    annotator = Annotator(ax, pairs=box_pairs, data=plot_data, x='replicates', y=plot_col, hue='layout', order=[1,2,3],hue_order=hue_order)
     annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
     annotator.apply_and_annotate()
 

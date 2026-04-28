@@ -472,7 +472,7 @@ def mean_controls(plate_array, layout, control_id):
     if control_locations.sum() < 1:
         return float("nan")
 
-    plate_df = pd.DataFrame(plate_array).stack(future_stack=True)future_stack=True.reset_index()
+    plate_df = pd.DataFrame(plate_array).stack(future_stack=True).reset_index()
     plate_df.columns = ["Rows", "Columns", "Intensity"]
     controls_df = pd.DataFrame(layout).stack(future_stack=True).reset_index()
     controls_df.columns = ["Rows", "Columns", "Type"]

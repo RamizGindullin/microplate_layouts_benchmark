@@ -63,7 +63,10 @@ class LayoutSpec:
 
     def as_dict(self, **fmt: Any) -> Dict[str, Any]:
         return {
+            # short key used in CSV layout column etc.
             "type": self.display_type,
+            # explicit display label expected by full_dose_response_evaluation
+            "display_type": self.display_type,
             "dir": self.layout_dir,
             "regex": self.regex_template.format(**fmt),
             "error_correction": self._resolved_error_correction(),
@@ -78,6 +81,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_COMPD_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         requires_layout_update=True,
+        color="#1b9e77",  # green
         plot_order=0,
     ),
     LayoutSpec(
@@ -85,6 +89,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="PLAID",
         layout_dir="layouts/compounds_PLAID_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+        color="#d95f02",  # orange
         plot_order=1,
     ),
     LayoutSpec(
@@ -92,6 +97,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="Random",
         layout_dir="layouts/compounds_manual_layouts/",
         regex_template=r"plate_layout_rand_(.+?).npy",
+        color="#7570b3",  # purple
         plot_order=2,
     ),
 ]

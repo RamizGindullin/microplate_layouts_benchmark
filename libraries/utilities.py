@@ -491,50 +491,65 @@ def create_latex_table(data, tex_filename, column_name="MSE"):
     latex_f.close()
     
     
-def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table_text = "Relative \\ECIC", column_name="MSE"):
-    # Open file
-    latex_f=open(tex_filename,'w')
-    
-    results_df = pd.DataFrame(data_1rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_2rep = pd.DataFrame(data_2rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_3rep = pd.DataFrame(data_3rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
+def create_latex_table_wide(
+    data_1rep,
+    data_2rep,
+    data_3rep,
+    tex_filename,
+    table_text="Relative \\ECIC",
+    column_name="MSE",
+):
+    """LaTeX table of per-layout, per-replicate summary stats (mean ± std).
 
-    results_df.insert(0, 'replicates', 1)
-    results_df_2rep.insert(0, 'replicates', 2)
-    results_df_3rep.insert(0, 'replicates', 3)
+    Uses the layout registry and generic replicate stacker so adding a new
+    layout only requires updating DOSE_RESPONSE_LAYOUT_SPECS.
+    """
+    latex_f = open(tex_filename, "w")
 
-    results_df = pd.concat([results_df,results_df_2rep])
-    results_df = pd.concat([results_df,results_df_3rep])
+    # Stack 1/2/3-replicate arrays into a single long frame
+    results_df = _stack_replicate_results_frames(
+        [data_1rep, data_2rep, data_3rep]
+    )
 
-    results_df.MSE = pd.to_numeric(results_df[column_name], errors='coerce')
-    results_df = results_df.sort_values(column_name)
-    results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
-    
-    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
-    
-#    plaid_description = results_df[results_df['layout']=='Effective'].describe()
- #   random_description = results_df[results_df['layout']=='Random'].describe()
-  #  border_description = results_df[results_df['layout']=='Border'].describe()
+    # Clean numeric column
+    results_df[column_name] = pd.to_numeric(
+        results_df[column_name], errors="coerce"
+    )
+    results_df = results_df.replace([np.inf, -np.inf], np.nan)
+    results_df = results_df.dropna(subset=[column_name])
 
-#    latex_f.write(" & Effective & Random & Border \\\\ ")
-#    latex_f.write("\n\\hline\n")
+    # Layout order driven by registry
+    layouts = [
+        spec.display_type
+        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+    ]
 
-    layouts = [s.display_type for s in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)]
-    
-    latex_f.write("\\multirow{4}{*}{"+table_text+"}")
-    
+    # Header row: multirow label + layout names
+    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
     for layout in layouts:
-        latex_f.write(" & "+layout)
-        
-        for rep in range(1,4):
-            description = results_df[(results_df['layout']==layout) & (results_df['replicates']==rep)].describe()
-            latex_f.write(" & "+str(round(description.loc['mean',column_name],2))+" $\\pm$ ("+str(round(description.loc['std',column_name],2))+")")
-            
-        latex_f.write("\\\\ \n")
-    
-    latex_f.write("\\hline \n")
-        
-    # Close file
+        latex_f.write(" & " + layout)
+    latex_f.write(r"\\ " + "\n")
+
+    # One row per replicate, with mean ± std for each layout
+    for rep in (1, 2, 3):
+        latex_f.write(f"Rep {rep}")
+        for layout in layouts:
+            sub = results_df[
+                (results_df["layout"] == layout)
+                & (results_df["replicates"] == rep)
+            ][column_name]
+
+            if sub.empty:
+                cell = "--"
+            else:
+                mean = sub.mean()
+                std = sub.std()
+                cell = f"{mean:.2f} $\\pm$ ({std:.2f})"
+
+            latex_f.write(" & " + cell)
+        latex_f.write(r"\\ " + "\n")
+
+    latex_f.write(r"\hline" + "\n")
     latex_f.close()
 
     
@@ -542,48 +557,69 @@ def create_latex_table_wide(data_1rep, data_2rep, data_3rep, tex_filename, table
     
     
     
-def create_latex_table_pvalues_wide(data_1rep, data_2rep, data_3rep, tex_filename, table_text = "Relative \\ECIC", column_name="MSE"):
-    # Open file
-    latex_f=open(tex_filename,'w')
-    
-    results_df = pd.DataFrame(data_1rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_2rep = pd.DataFrame(data_2rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df_3rep = pd.DataFrame(data_3rep, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
+def create_latex_table_pvalues_wide(
+    data_1rep,
+    data_2rep,
+    data_3rep,
+    tex_filename,
+    table_text="Relative \\ECIC",
+    column_name="MSE",
+):
+    """LaTeX table of per-replicate pairwise p-values between layouts.
 
-    results_df.insert(0, 'replicates', 1)
-    results_df_2rep.insert(0, 'replicates', 2)
-    results_df_3rep.insert(0, 'replicates', 3)
+    For each replicate (1,2,3) and each layout pair, writes a t-test p-value.
+    Layout ordering and membership come from DOSE_RESPONSE_LAYOUT_SPECS.
+    """
+    latex_f = open(tex_filename, "w")
 
-    results_df = pd.concat([results_df,results_df_2rep])
-    results_df = pd.concat([results_df,results_df_3rep])
+    # Stack arrays into a single long frame
+    results_df = _stack_replicate_results_frames(
+        [data_1rep, data_2rep, data_3rep]
+    )
 
-    results_df[column_name] = pd.to_numeric(results_df[column_name], errors='coerce')
-    results_df = results_df.sort_values(column_name)
-    results_df = results_df[np.logical_not(np.isnan(results_df[column_name]))]
-    results_df = results_df[np.logical_not(np.isinf(results_df[column_name]))]
-    
-    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
-    
-    layouts = [s.display_type for s in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)]
-    
-    latex_f.write("\multirow{4}{*}{" + table_text + "}")
-    
-    for layout_1 in range(len(layouts)):
-        for layout_2 in range(layout_1 + 1, len(layouts)):
-            latex_f.write(" & "+layouts[layout_1]+" -- "+layouts[layout_2])
+    results_df[column_name] = pd.to_numeric(
+        results_df[column_name], errors="coerce"
+    )
+    results_df = results_df.replace([np.inf, -np.inf], np.nan)
+    results_df = results_df.dropna(subset=[column_name])
 
-            for rep in range(1,4):
-                results_array_1 = results_df.loc[(results_df.layout==layouts[layout_1]) & (results_df.replicates==rep),column_name]
-                results_array_2 = results_df.loc[(results_df.layout==layouts[layout_2]) & (results_df.replicates==rep),column_name]
+    layouts = [
+        spec.display_type
+        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+    ]
 
-                _, pvalue = stats.ttest_ind(results_array_1,results_array_2,equal_var = False)
-                latex_f.write(" & "+'{:.2e}'.format(pvalue))
+    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
 
-            latex_f.write("\\\\ \n")
-    
-    latex_f.write("\\hline \n")
-        
-    # Close file
+    # One block per layout pair, with three replicate p-values
+    for i, layout_1 in enumerate(layouts):
+        for layout_2 in layouts[i + 1 :]:
+            latex_f.write(" & " + layout_1 + " -- " + layout_2)
+
+            for rep in (1, 2, 3):
+                arr1 = results_df.loc[
+                    (results_df["layout"] == layout_1)
+                    & (results_df["replicates"] == rep),
+                    column_name,
+                ]
+                arr2 = results_df.loc[
+                    (results_df["layout"] == layout_2)
+                    & (results_df["replicates"] == rep),
+                    column_name,
+                ]
+
+                if arr1.empty or arr2.empty:
+                    cell = "--"
+                else:
+                    _, pvalue = stats.ttest_ind(
+                        arr1, arr2, equal_var=False
+                    )
+                    cell = f"{pvalue:.2e}"
+
+                latex_f.write(" & " + cell)
+
+            latex_f.write(r"\\ " + "\n")
+
+    latex_f.write(r"\hline" + "\n")
     latex_f.close()
 
     

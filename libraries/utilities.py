@@ -270,12 +270,12 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     
     ### Plot heatmap before normalization
     unstack_df = combined_df[["Rows","Columns","Intensity"]].copy()
-    unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
+    unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc='sum')
 
     
     ### Plot heatmap after normalization
     unstack_adjusted_df = n_combined_df[["Rows","Columns","Intensity"]].copy()
-    unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
+    unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc='sum')
     
     
     ### Plotting well series with original and normalized data
@@ -354,14 +354,14 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fi
     
     results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
 
-    results_df.MSE = pd.to_numeric(results_df.MSE, errors='coerce')
-    results_df.E = pd.to_numeric(results_df.E, errors='coerce')
-    results_df.r2_score = pd.to_numeric(results_df.r2_score, errors='coerce')
-    results_df.d = pd.to_numeric(results_df.d, errors='coerce')
-    results_df.fit_d = pd.to_numeric(results_df.fit_d, errors='coerce')
+    results_df['MSE']      = pd.to_numeric(results_df['MSE'], errors='coerce')
+    results_df['e']        = pd.to_numeric(results_df['e'], errors='coerce')
+    results_df['r2_score'] = pd.to_numeric(results_df['r2_score'], errors='coerce')
+    results_df['d']        = pd.to_numeric(results_df['d'], errors='coerce')
+    results_df['fit_d']    = pd.to_numeric(results_df['fit_d'], errors='coerce')
 
     results_df.insert(0, 'diff_d', 0)
-    results_df.diff_d = abs(results_df.d - results_df.fit_d)
+    results_df['diff_d'] = abs(results_df['d'] - results_df['fit_d'])
 
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
@@ -410,7 +410,7 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fi
         plot_col = "diff_d"
 
 
-    plt.legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
+    plt.gca().legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
 
     plot_data = results_df[results_df["MSE"] != np.inf] if plot_col == "MSE" else results_df
     annotator = Annotator(ax, pairs=box_pairs, data=plot_data, x='replicates', y=plot_col, hue='layout', order=[1,2,3],hue_order=hue_order)
@@ -454,7 +454,7 @@ def create_latex_table(data, tex_filename, column_name="MSE"):
     latex_f=open(tex_filename,'w')
     
     results_df = pd.DataFrame(data, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df.MSE = pd.to_numeric(results_df.MSE, errors='coerce')
+    results_df['MSE'] = pd.to_numeric(results_df['MSE'], errors='coerce')
     results_df = results_df.sort_values("MSE")
     results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
 
@@ -942,7 +942,7 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     combined_df = pd.merge(intensity_df, types_df,  how='left', on=['Rows','Columns'])
     
     unstack_df = combined_df[["Rows","Columns","Intensity"]].copy()
-    unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
+    unstacked_df = pd.pivot_table(unstack_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc='sum')
     plot_plate(unstacked_df, title="Input",filename=filename+'heatmap-before')
     
     y_adjusted = combined_df.copy()
@@ -981,7 +981,7 @@ def plot_well_series_lowess_internal(plate_array, layout, neg_control_id=-1, pos
     plt.close(fig)
         
     unstack_adjusted_df = y_adjusted[["Rows","Columns","Intensity"]].copy()
-    unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc=np.sum)
+    unstacked_adjusted_df = pd.pivot_table(unstack_adjusted_df, values='Intensity', index=['Rows'],columns=['Columns'], aggfunc='sum')
     
     return unstacked_adjusted_df.to_numpy()
 

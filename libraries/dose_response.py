@@ -136,7 +136,6 @@ def fit_data(
 
             try:
                 if neg_control_values is None:
-                    lgnd.legend_handles[2].set_sizes([30])
                     fit_coefs, _ = opt.curve_fit(
                         ll4,
                         group.dose,
@@ -264,7 +263,9 @@ def fit_data(
             plt.ylabel("Response (%)", fontsize=10)
             plt.xlabel("Log(Concentration)", fontsize=10)
             lgnd = plt.legend(loc="lower right", fontsize=10)
-            lgnd.legend_handles[2].set_sizes([30])
+            # Only the Controls scatter marker (index 2) needs resizing
+            if len(lgnd.legend_handles) > 2:
+                lgnd.legend_handles[2].set_sizes([30])
 
             out_path = os.path.join(
                 output_dir, f"{layout_type}_compound_{name}-right-half.png"
@@ -386,9 +387,9 @@ def _run_experiment(
     error_function,
     error,
     normalization_function,
-    min_dist,
-    lose_from_row,
-    lose_to_row,
+    min_dist=0,
+    lose_from_row=0,
+    lose_to_row=0,
     plate_type=None,
     compounds=None,
     concentrations=None,

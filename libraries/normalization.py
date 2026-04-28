@@ -44,7 +44,7 @@ def normalize_plate_nearest_control(plate_array, layout, neg_control_id, min_dis
     return normalized_plate
 
 
-def normalize_plate_mean(plate_array, layout, neg_control_id):
+def normalize_plate_mean(plate_array, layout, neg_control_id, min_dist=None):
     control_locations = util.get_controls_layout(layout, neg_control=neg_control_id)
     if control_locations.sum() == 0:
         return plate_array.copy()
@@ -59,7 +59,7 @@ def normalize_plate_mean(plate_array, layout, neg_control_id):
     return (100 / mean) * plate_array
 
 
-def normalize_plate_median(plate_array, layout, neg_control_id):
+def normalize_plate_median(plate_array, layout, neg_control_id, min_dist=None):
     control_locations = util.get_controls_layout(layout, neg_control=neg_control_id)
     if control_locations.sum() == 0:
         return plate_array.copy()

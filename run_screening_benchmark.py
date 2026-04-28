@@ -37,6 +37,7 @@ import libraries.utilities as util
 from benchmark_common import (
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
+    screening_control_figure_cases,
     screening_metrics_plate_types,
     screening_plate_types,
     validate_layout_registry_consistency,
@@ -67,11 +68,7 @@ SCREENING_ROC_PR_CASES = [
     ("screening-residuals-8-8-0.1-pna-0.6{today_tag}.csv",    "8-8-0.1-40.png"),
 ]
 
-CONTROL_LAYOUT_FIGURE_CASES = [
-    ("layouts/screening_RANDM_layouts/plate_layout_rand_10-10_02.npy", "figures/plate_random-controls-rows-error.png"),
-    ("layouts/screening_PLAID_layouts/plate_layout_10-10_01.npy", "figures/plate_plaid-controls-rows-error.png"),
-    ("layouts/screening_COMPD_layouts/plate_layout_10-10_01.npy", "figures/plate_compd-controls-rows-error.png"),
-]
+# Control-layout figure inputs are derived from benchmark_common.SCREENING_LAYOUT_SPECS.
 
 
 # ---------------------------------------------------------------------------
@@ -459,7 +456,7 @@ def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
 
     np.random.seed(42)
 
-    for layout_path, output_filename in CONTROL_LAYOUT_FIGURE_CASES:
+    for layout_path, output_filename in screening_control_figure_cases():
         layout = np.load(layout_path)
         neg_control_id = np.max(layout)
         pos_control_id = neg_control_id - 1

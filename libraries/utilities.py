@@ -179,6 +179,7 @@ def get_controls_layout(layout, neg_control = None):
     return(control_layout)
 
 
+# TODO(dead-code): _shape_layout is not called by any benchmark script.
 def _shape_layout(layout, num_rows, num_columns, size_empty_edge):
     layout = np.reshape(layout,(-1, num_columns-2*size_empty_edge))
     
@@ -198,6 +199,7 @@ def _shape_layout(layout, num_rows, num_columns, size_empty_edge):
     return layout
 
 
+# TODO(dead-code): check_duplicated_layouts is not called by any benchmark script.
 def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
 
     layouts = os.listdir(layout_dir)
@@ -229,6 +231,8 @@ def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
     return duplicates
 
 
+# TODO(dead-code): plot_well_series_precomputed_normalization is not called by any
+# benchmark script. Retained for potential external use.
 def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, neg_control_id, pos_control_id, order=0, vmin=None, vmax=None, filename=None):    
     ''' Creates the well series plots used for the PLAID bioseminar presentation
     
@@ -333,7 +337,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
 
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fig_dir="", fig_type="", plot_mse=True, y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
+def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fig_dir="", fig_type="", y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -354,11 +358,11 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fi
     
     results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
 
-    results_df['MSE']      = pd.to_numeric(results_df['MSE'], errors='coerce')
-    results_df['e']        = pd.to_numeric(results_df['e'], errors='coerce')
+    results_df['MSE'] = pd.to_numeric(results_df['MSE'], errors='coerce')
+    results_df['E'] = pd.to_numeric(results_df['E'], errors='coerce')
     results_df['r2_score'] = pd.to_numeric(results_df['r2_score'], errors='coerce')
-    results_df['d']        = pd.to_numeric(results_df['d'], errors='coerce')
-    results_df['fit_d']    = pd.to_numeric(results_df['fit_d'], errors='coerce')
+    results_df['d'] = pd.to_numeric(results_df['d'], errors='coerce')
+    results_df['fit_d'] = pd.to_numeric(results_df['fit_d'], errors='coerce')
 
     results_df.insert(0, 'diff_d', 0)
     results_df['diff_d'] = abs(results_df['d'] - results_df['fit_d'])
@@ -400,17 +404,17 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fi
         plt.ylabel("Mean absolute log10 difference", fontsize=10)
 
     elif fig_type == "absic50":
-        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette='YlOrBr', legend=False)
-        plt.ylabel("Mean absolute log10 difference", fontsize = 10)
+        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=[s.color for s in DOSE_RESPONSE_LAYOUT_SPECS], legend=False)
+        plt.ylabel("Mean absolute log10 difference", fontsize=10)
 
     else:
-        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette = "GnBu", legend=False)
-        plt.ylabel("Mean absolute d difference", fontsize = 10)
+        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette=[s.color for s in DOSE_RESPONSE_LAYOUT_SPECS], legend=False)
+        plt.ylabel("Mean absolute d difference", fontsize=10)
         fig_type = "d_diff"
         plot_col = "diff_d"
 
 
-    plt.gca().legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
+    plt.legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
 
     plot_data = results_df[results_df["MSE"] != np.inf] if plot_col == "MSE" else results_df
     annotator = Annotator(ax, pairs=box_pairs, data=plot_data, x='replicates', y=plot_col, hue='layout', order=[1,2,3],hue_order=hue_order)
@@ -449,6 +453,8 @@ def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='',
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
     plt.close(fig)
 
+# TODO(dead-code): create_latex_table is superseded by create_latex_table_wide.
+# Not called by any benchmark script.
 def create_latex_table(data, tex_filename, column_name="MSE"):
     # Open file
     latex_f=open(tex_filename,'w')

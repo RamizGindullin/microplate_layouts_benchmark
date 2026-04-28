@@ -35,6 +35,7 @@ from benchmark_common import (
     BOWL_ERROR_LEVELS,
     DOSE_RESPONSE_FIGURE_CASES,
     RIGHT_HALF_ERROR_LEVELS,
+    dose_response_curve_examples,
     dose_response_plate_types,
     dilution_for,
     fig_dir_str,
@@ -232,6 +233,27 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
                 )
 
 
+RESIDUALS_SCENARIO_GROUPS = [
+    (
+        "curve_info-new-reg",
+        BOWL_ERROR_LEVELS,
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
+    ),
+    (
+        "bowl-neg-control-new-reg",
+        BOWL_ERROR_LEVELS,
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+    ),
+    (
+        "right-half-neg-control-log-new-reg",
+        RIGHT_HALF_ERROR_LEVELS,
+        lambda doses, dil, enl: (
+            f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}"
+        ),
+    ),
+]
+
+
 IC50_DMAX_R2_SCENARIO_GROUPS = [
     (
         "curve_info-new-reg",
@@ -262,51 +284,19 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
     cfg.figures_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = fig_dir_str(cfg.figures_dir)
 
-    # Bowl-shaped, no negatives in the fit
-    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
-        for error_nl in BOWL_ERROR_LEVELS:
-            r1, r2, r3 = _load_csv_triple(
-                cfg, "residuals", doses, dilution, error_nl, "curve_info-new-reg"
-            )
-            util.plot_barplot_residuals_data(
-                r1, r2, r3,
-                fig_name=f"-1-2-3-{doses}doses-dil{dilution}-bowl-{error_nl}",
-                y_max=450,
-                leg_loc="upper center",
-                fig_dir=fig_dir,
-            )
-
-    # Bowl-shaped, with 4 negatives in the fit
-    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
-        for error_nl in BOWL_ERROR_LEVELS:
-            r1, r2, r3 = _load_csv_triple(
-                cfg, "residuals", doses, dilution, error_nl, "bowl-neg-control-new-reg"
-            )
-            util.plot_barplot_residuals_data(
-                r1, r2, r3,
-                fig_name=f"-1-2-3-{doses}doses-dil{dilution}-bowl-neg-controls-{error_nl}",
-                y_max=450,
-                leg_loc="upper center",
-                fig_dir=fig_dir,
-            )
-
-    # Column-wise right-half effects
-    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
-        for error_nl in RIGHT_HALF_ERROR_LEVELS:
-            r1, r2, r3 = _load_csv_triple(
-                cfg, "residuals", doses, dilution, error_nl,
-                "right-half-neg-control-log-new-reg"
-            )
-            util.plot_barplot_residuals_data(
-                r1, r2, r3,
-                fig_name=(
-                    f"-1-2-3-{doses}doses-dil{dilution}"
-                    f"-half-columns-neg-controls-{error_nl}"
-                ),
-                y_max=450,
-                leg_loc="upper center",
-                fig_dir=fig_dir,
-            )
+    for id_text, error_nls, fig_name_fn in RESIDUALS_SCENARIO_GROUPS:
+        for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+            for error_nl in error_nls:
+                r1, r2, r3 = _load_csv_triple(
+                    cfg, "residuals", doses, dilution, error_nl, id_text
+                )
+                util.plot_barplot_residuals_data(
+                    r1, r2, r3,
+                    fig_name=fig_name_fn(doses, dilution, error_nl),
+                    y_max=450,
+                    leg_loc="upper center",
+                    fig_dir=fig_dir,
+                )
 
     # Special paper residual panel
     r1, r2, r3 = _load_csv_triple(
@@ -393,25 +383,9 @@ def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:
 # Stage 3: Curves
 # -----------------------------------------------------------------------
 
-# Curves notebook layout specs:
-#   COMPD: plate_layout_40-{conc}-{rep}_01.npy  → compounds always 40 per filename prefix
-#   PLAID: plate_layout_20-{conc}-{rep}_01.npy  → compounds always 20 per filename prefix
-#   RANDOM: plate_layout_rand_02.npy             → compounds/conc/rep taken from outer scope
-#
-# For COMPD/PLAID the notebook overwrites (compounds, concentrations, replicates) from
-# the layout filename. For RANDOM it leaves them at the outer-scope default (8 conc, 3 rep).
-# The formula int((14*22-20)/(conc*rep)) is therefore only a starting value for RANDOM.
-
-# Each entry: (layout_type, layout_dir, layout_file, compounds, concentrations, replicates)
-_CURVES_LAYOUTS = [
-    # COMPD — layout prefix says 40 compounds
-    ("COMPD",  "layouts/compounds_COMPD_layouts/",  "plate_layout_40-12-8-3_01.npy",  40, 8, 3),
-    # PLAID — layout prefix says 20 compounds
-    ("PLAID",  "layouts/compounds_PLAID_layouts/",  "plate_layout_20-12-8-3_01.npy",  20, 8, 3),
-    # RANDOM — no compound count in filename; use outer-scope defaults (8 conc, 3 rep)
-    ("Random", "layouts/compounds_manual_layouts/", "plate_layout_rand_02.npy",
-     _compounds_for(8, 3), 8, 3),
-]
+# Curve example layouts are derived from benchmark_common.DOSE_RESPONSE_LAYOUT_SPECS
+# via dose_response_curve_examples(), so adding a new layout only requires updating
+# the central registry.
 
 
 def generate_example_curves(cfg: DoseResponseConfig) -> None:
@@ -443,7 +417,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     }
     limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
 
-    for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in _CURVES_LAYOUTS:
+    for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in dose_response_curve_examples():
         try:
             dilution = dilution_for(concentrations)
         except ValueError:

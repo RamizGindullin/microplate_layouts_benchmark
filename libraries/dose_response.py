@@ -98,6 +98,11 @@ def collect_plate_results(layout, plate):
     return results
 
 
+def _resize_control_legend_marker(legend):
+    if legend is not None and len(legend.legend_handles) > 2:
+        legend.legend_handles[2].set_sizes([30])
+
+
 def fit_data(
     result_data,
     response_column,
@@ -263,9 +268,7 @@ def fit_data(
             plt.ylabel("Response (%)", fontsize=10)
             plt.xlabel("Log(Concentration)", fontsize=10)
             lgnd = plt.legend(loc="lower right", fontsize=10)
-            # Only the Controls scatter marker (index 2) needs resizing
-            if len(lgnd.legend_handles) > 2:
-                lgnd.legend_handles[2].set_sizes([30])
+            _resize_control_legend_marker(lgnd)
 
             out_path = os.path.join(
                 output_dir, f"{layout_type}_compound_{name}-right-half.png"
@@ -387,14 +390,15 @@ def _run_experiment(
     error_function,
     error,
     normalization_function,
-    min_dist=0,
-    lose_from_row=0,
-    lose_to_row=0,
+    min_dist,
+    lose_from_row,
+    lose_to_row,
     plate_type=None,
     compounds=None,
     concentrations=None,
     replicates=None,
 ):
+    plate_content = plate_content.copy()
     layout = np.load(layout_dir + layout_file)
     if plate_type is not None and plate_type.get("requires_layout_update", False):
         layout = update_compd_layout(layout, compounds, concentrations, replicates)

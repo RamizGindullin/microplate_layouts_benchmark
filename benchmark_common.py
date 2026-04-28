@@ -54,6 +54,12 @@ class LayoutSpec:
     plot_order: int = 0       # used for sorted() calls in LaTeX table generation
     requires_layout_update: bool = False  # True for layouts (e.g. COMPD) that need
                                           # update_compd_layout() applied after loading
+    curve_example_file: Optional[str] = None
+    curve_example_compounds: Optional[int] = None
+    curve_example_concentrations: Optional[int] = None
+    curve_example_replicates: Optional[int] = None
+    control_example_file: Optional[str] = None
+    control_figure_output: Optional[str] = None
 
     def _resolved_error_correction(self) -> Callable:
         """Return the error-correction callable, resolving the default lazily."""
@@ -83,6 +89,10 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         requires_layout_update=True,
         color="#1b9e77",  # green
         plot_order=0,
+        curve_example_file="plate_layout_40-12-8-3_01.npy",
+        curve_example_compounds=40,
+        curve_example_concentrations=8,
+        curve_example_replicates=3,
     ),
     LayoutSpec(
         key="plaid",
@@ -91,6 +101,10 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         color="#d95f02",  # orange
         plot_order=1,
+        curve_example_file="plate_layout_20-12-8-3_01.npy",
+        curve_example_compounds=20,
+        curve_example_concentrations=8,
+        curve_example_replicates=3,
     ),
     LayoutSpec(
         key="random",
@@ -99,6 +113,10 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_rand_(.+?).npy",
         color="#7570b3",  # purple
         plot_order=2,
+        curve_example_file="plate_layout_rand_02.npy",
+        curve_example_compounds=12,
+        curve_example_concentrations=8,
+        curve_example_replicates=3,
     ),
 ]
 
@@ -111,6 +129,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#59296e",
         plot_order=0,
+        control_example_file="plate_layout_rand_10-10_02.npy",
+        control_figure_output="figures/plate_random-controls-rows-error.png",
     ),
     LayoutSpec(
         key="plaid",
@@ -119,6 +139,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#cc0253",
         plot_order=1,
+        control_example_file="plate_layout_10-10_01.npy",
+        control_figure_output="figures/plate_plaid-controls-rows-error.png",
     ),
     LayoutSpec(
         key="compd",
@@ -127,6 +149,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
         color="#e68302",
         plot_order=2,
+        control_example_file="plate_layout_10-10_01.npy",
+        control_figure_output="figures/plate_compd-controls-rows-error.png",
     ),
 ]
 
@@ -168,6 +192,14 @@ def screening_metrics_plate_types(neg_controls: int, pos_controls: int):
         for spec in SCREENING_LAYOUT_SPECS
     ]
 
+
+def screening_control_figure_cases():
+    return [
+        (os.path.join(spec.layout_dir, spec.control_example_file), spec.control_figure_output)
+        for spec in SCREENING_LAYOUT_SPECS
+        if spec.control_example_file is not None and spec.control_figure_output is not None
+    ]
+
 DOSE_RESPONSE_LAYOUT_ORDER = [spec.display_type for spec in DOSE_RESPONSE_LAYOUT_SPECS]
 DOSE_RESPONSE_LAYOUT_BOX_PAIRS = [
     (DOSE_RESPONSE_LAYOUT_ORDER[i], DOSE_RESPONSE_LAYOUT_ORDER[j])
@@ -190,6 +222,21 @@ def dose_response_plate_types(compounds: int, concentrations: int, replicates: i
             replicates=replicates,
         )
         for spec in DOSE_RESPONSE_LAYOUT_SPECS
+    ]
+
+
+def dose_response_curve_examples():
+    return [
+        (
+            spec.display_type,
+            spec.layout_dir,
+            spec.curve_example_file,
+            spec.curve_example_compounds,
+            spec.curve_example_concentrations,
+            spec.curve_example_replicates,
+        )
+        for spec in DOSE_RESPONSE_LAYOUT_SPECS
+        if spec.curve_example_file is not None
     ]
 
 DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]

@@ -6,7 +6,7 @@
 #
 # Removed constraint: matplotlib <= 3.7.3 (was required due to a rendering issue
 # in tight_layout/constrained_layout interaction that no longer affects the code
-# after the Step 3 refactor).  The code is tested against matplotlib >= 3.8.
+# after the refactor).  The code is tested against matplotlib >= 3.8.
 #
 # Removed constraint: pandas < 3 (pandas 3.x confirmed working).
 

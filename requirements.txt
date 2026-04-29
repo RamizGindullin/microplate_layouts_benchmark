@@ -7,8 +7,6 @@
 # Removed constraint: matplotlib <= 3.7.3 (was required due to a rendering issue
 # in tight_layout/constrained_layout interaction that no longer affects the code
 # after the refactor).  The code is tested against matplotlib >= 3.8.
-#
-# Removed constraint: pandas < 3 (pandas 3.x confirmed working).
 
 # Core numerics
 numpy>=1.26            # 2.x supported; copy-on-write semantics are benign here

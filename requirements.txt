@@ -7,11 +7,13 @@
 # Removed constraint: matplotlib <= 3.7.3 (was required due to a rendering issue
 # in tight_layout/constrained_layout interaction that no longer affects the code
 # after the Step 3 refactor).  The code is tested against matplotlib >= 3.8.
+#
+# Removed constraint: pandas < 3 (pandas 3.x confirmed working).
 
 # Core numerics
 numpy>=1.26            # 2.x supported; copy-on-write semantics are benign here
 scipy>=1.11            # interp1d, stats.mannwhitneyu used throughout
-pandas>=2.2,<3         # pandas 3.x has breaking groupby/copy behaviour; re-test before upgrading
+pandas>=2.2            # pandas 3.x confirmed working
 
 # Plotting
 matplotlib>=3.8        # removes the <= 3.7.3 pin; constrained_layout stable from 3.7+
@@ -23,6 +25,6 @@ statannotations>=0.6   # 0.7.x tested; requires seaborn>=0.12
 # Machine learning metrics (ROC-AUC, PR-AUC)
 scikit-learn>=1.3
 
-# LOWESS smoothing (used in normalization.py via moepy, and loess_2d in utilities)
+# LOWESS smoothing (used in normalization.py via moepy, and loess_2d in normalization.py)
 moepy>=1.1.4
 loess>=2.0             # provides loess.loess_2d used in normalization.py

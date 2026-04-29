@@ -455,22 +455,37 @@ def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
     pos_stdev = 7
 
     np.random.seed(42)
+    # Generate one shared base plate using an arbitrary reference layout shape
+    ref_layout = np.load(next(iter(screening_control_figure_cases()))[0])
+    neg_control_id = np.max(ref_layout)
+    pos_control_id = neg_control_id - 1
+    shared_ideal, _ = sc.fill_plate(
+        ref_layout, neg_control_id, pos_control_id,
+        neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
+    )
+    shared_disturbed = dt.add_linear_errors_to_upper_rows_half(shared_ideal, 4)
+    
+    vmin = float(shared_disturbed.min())
+    vmax = float(shared_disturbed.max())
+    
+    util.plot_plate(
+        shared_disturbed,
+        title="",
+        mask=None,
+        filename="figures/plate_rows-error-base.png",
+        vmin=vmin, vmax=vmax
+    )
 
     for layout_path, output_filename in screening_control_figure_cases():
         layout = np.load(layout_path)
         neg_control_id = np.max(layout)
-        pos_control_id = neg_control_id - 1
-        ideal_plate, _ = sc.fill_plate(
-            layout, neg_control_id, pos_control_id,
-            neg_control_mean, pos_control_mean, neg_stdev, pos_stdev,
-        )
-        disturbed_plate = dt.add_linear_errors_to_upper_rows_half(ideal_plate, 4)
         control_locations = util.get_controls_layout(layout)
         util.plot_plate(
-            disturbed_plate,
+            shared_disturbed,
             title="",
             mask=np.array(1 - control_locations, dtype=bool),
             filename=output_filename,
+            vmin=vmin, vmax=vmax
         )
 
 

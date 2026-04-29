@@ -412,7 +412,14 @@ def _run_experiment(
 
     mean_neg_ctrl = mean_controls(plate, layout, neg_control_id)
     results = collect_plate_results(layout, plate)
-    plate_content["results"] = results
+    results_series = pd.Series(results, name="results")
+    # results[i] corresponds to compound neg_control_id - i - 2
+    neg_control_id = np.max(layout)
+    results_map = {
+        neg_control_id - i - 1: results[i]
+        for i in range(len(results))
+    }
+    plate_content["results"] = plate_content["compound"].map(results_map)
     return plate_content, mean_neg_ctrl
 
 

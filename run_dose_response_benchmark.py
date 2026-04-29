@@ -227,6 +227,7 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
                     concentrations=concentrations,
                     replicates=replicates,
                     dilution=dilution,
+                    error_nl=scenario.error_nl,
                     today=today,
                     id_text=scenario.id_text,
                     data_directory=str(cfg.data_dir) + os.sep,

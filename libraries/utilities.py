@@ -309,7 +309,7 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=DOSE_RESPONSE_LAYOUT_BOX_PAIRS, fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript. """
     residuals_df = _prepare_dose_response_residuals_frame(
         residuals_1rep, residuals_2rep, residuals_3rep
@@ -802,9 +802,9 @@ def _plot_roc_pr_all_batches(ax, df, display_type, color, curve_type):
     std_auc = float(np.std(auc_vals))
 
     ax.plot(grid, mean_curve, color=color)
-    ax.fill_between(grid, mean_curve - std_curve, mean_curve + std_curve,
-                    color=color, alpha=0.15)
-
+    ax.fill_between(grid, mean_curve - std_curve, mean_curve + std_curve, color=color, alpha=0.15)
+    #print(display_type, color, )
+    
     return f"{display_type} (AUC = {mean_auc:.2f} \u00b1 {std_auc:.2f})"
 
 
@@ -830,7 +830,7 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir=''):
 
     ax.set_ylabel("True Positive Rate", fontsize=10)
     ax.set_xlabel("False Positive Rate", fontsize=10)
-    ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
+    ax.legend(handles=ax.get_lines(), labels=legend_labels, loc="lower right", fontsize=8)
     ax.tick_params(axis="both", labelsize=8)
     if fig_name:
         fig.savefig(os.path.join(fig_dir, fig_name), bbox_inches="tight", dpi=300)
@@ -859,7 +859,7 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir=''):
 
     ax.set_ylabel("Precision", fontsize=10)
     ax.set_xlabel("Recall", fontsize=10)
-    ax.legend(labels=legend_labels, loc="lower right", fontsize=8)
+    ax.legend(handles=ax.get_lines(), labels=legend_labels, loc="lower right", fontsize=8)
     ax.tick_params(axis="both", labelsize=8)
     if fig_name:
         fig.savefig(os.path.join(fig_dir, fig_name), bbox_inches="tight", dpi=300)

@@ -411,6 +411,8 @@ def _run_experiment(
     plate = normalization_function(plate, layout, neg_control_id, min_dist=min_dist)
 
     mean_neg_ctrl = mean_controls(plate, layout, neg_control_id)
+    #results = collect_plate_results(layout, plate)
+    #plate_content["results"] = results
     results = collect_plate_results(layout, plate)
     results_series = pd.Series(results, name="results")
     # results[i] corresponds to compound neg_control_id - i - 2

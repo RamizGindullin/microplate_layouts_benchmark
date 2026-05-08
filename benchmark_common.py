@@ -51,7 +51,9 @@ class LayoutSpec:
     # Storing an explicit callable overrides the default.
     error_correction: Optional[Callable] = None
     color: str = ""           # plot colour for this layout (ROC/PR/scatter figures)
+    residuals_color: str = "" # residual plot colour for this layout (shades of purple)
     plot_order: int = 0       # used for sorted() calls in LaTeX table generation
+    residuals_plot_order: int = 0 # used for residual plots
     requires_layout_update: bool = False  # True for layouts (e.g. COMPD) that need
                                           # update_compd_layout() applied after loading
     curve_example_file: Optional[str] = None
@@ -88,7 +90,9 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         requires_layout_update=True,
         color="#1b9e77",  # green
+        residuals_color="#37185d",
         plot_order=0,
+        residuals_plot_order=2,
         curve_example_file="plate_layout_40-12-8-3_01.npy",
         curve_example_compounds=12,
         curve_example_concentrations=8,
@@ -100,7 +104,9 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_PLAID_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         color="#d95f02",  # orange
+        residuals_color="#765591",
         plot_order=1,
+        residuals_plot_order=1,
         curve_example_file="plate_layout_20-12-8-3_01.npy",
         curve_example_compounds=12,
         curve_example_concentrations=8,
@@ -112,7 +118,9 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_manual_layouts/",
         regex_template=r"plate_layout_rand_(.+?).npy",
         color="#7570b3",  # purple
+        residuals_color="#b7a2d8",
         plot_order=2,
+        residuals_plot_order=0,
         curve_example_file="plate_layout_rand_02.npy",
         curve_example_compounds=12,
         curve_example_concentrations=8,
@@ -201,6 +209,10 @@ def screening_control_figure_cases():
     ]
 
 DOSE_RESPONSE_LAYOUT_ORDER = [spec.display_type for spec in DOSE_RESPONSE_LAYOUT_SPECS]
+DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER = [
+    spec.display_type
+    for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.residuals_plot_order)
+]
 DOSE_RESPONSE_LAYOUT_BOX_PAIRS = [
     (DOSE_RESPONSE_LAYOUT_ORDER[i], DOSE_RESPONSE_LAYOUT_ORDER[j])
     for i in range(len(DOSE_RESPONSE_LAYOUT_ORDER))

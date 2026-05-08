@@ -16,6 +16,7 @@ from benchmark_common import (
     DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
     DOSE_RESPONSE_LAYOUT_BOX_PAIRS,
     DOSE_RESPONSE_LAYOUT_ORDER,
+    DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER,
     DOSE_RESPONSE_LAYOUT_SPECS,
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
@@ -130,6 +131,8 @@ def _stack_replicate_residuals_frames(replicate_arrays):
     df = pd.concat(frames, ignore_index=True)
     df["layout"] = _classify_dose_response_layout_series(df["layout"])
     df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
+    df["true_residuals"] = pd.to_numeric(df["true_residuals"], errors="coerce")
+    df["rows lost"] = pd.to_numeric(df["rows lost"], errors="coerce")
     return df
 
 
@@ -309,32 +312,47 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript. """
     residuals_df = _prepare_dose_response_residuals_frame(
         residuals_1rep, residuals_2rep, residuals_3rep
     )
-    residuals_df = residuals_df.rename(columns={"replicates": "Replicate", "layout": "Layout type", "residuals": "Residuals"})
-    comparison_labels = list(hue_order)
+    residuals_df = residuals_df.rename(columns={"replicates": "Replicates", "layout": "Layout type", "true_residuals": "Residuals"})
+    residuals_df = residuals_df[residuals_df['rows lost'] <= 1]
     if box_pairs is None:
         box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
 
-    fig,ax = plt.subplots(figsize=(4,5))
-    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
-    sns.boxplot(data=residuals_df, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
-    _apply_boxplot_annotations(
+    fig,ax = plt.subplots(figsize=(4,3))
+    palette = [spec.residuals_color for spec in DOSE_RESPONSE_LAYOUT_SPECS]
+    ax = sns.boxplot(
+        data=residuals_df,
+        x='Replicates', y='Residuals',
+        hue='Layout type',
+        ax=ax,
+        palette=sns.color_palette(palette, len(hue_order)),
+        hue_order=hue_order
+    )
+    plt.ylabel("Mean residuals", fontsize=10)
+    annotator = Annotator(
         ax,
         data=residuals_df,
-        x='Replicate',
-        y='Residuals',
+        x='Replicates', y='Residuals',
         pairs=box_pairs,
         order=[1, 2, 3],
         hue='Layout type',
-        hue_order=comparison_labels,
+        hue_order=hue_order,
     )
+    annotator.configure(
+        test='t-test_ind',
+        text_format='star',
+        loc='inside',
+        pvalue_thresholds=pvalue_thresholds,
+        text_offset=-1,
+    )
+    annotator.apply_and_annotate()
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
     ax.set_ylim(top=y_max)
-    fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
+    fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight', dpi=300)
     plt.close(fig)
 
 def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fig_dir="", fig_type="", y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None):

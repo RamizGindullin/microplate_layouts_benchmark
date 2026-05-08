@@ -324,7 +324,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
 
     fig,ax = plt.subplots(figsize=(4,3))
     palette = [spec.residuals_color for spec in DOSE_RESPONSE_LAYOUT_SPECS]
-    ax = sns.boxplot(
+    ax = sns.barplot(
         data=residuals_df,
         x='Replicates', y='Residuals',
         hue='Layout type',

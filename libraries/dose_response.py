@@ -224,7 +224,7 @@ def fit_data(
                 max(result_data.logDose) * 1.1,
                 256,
             )
-            ref_dose_conc = 10 ** -ref_dose
+            ref_dose_conc = 10 ** (-ref_dose) / 1e-5 
 
             sns.lmplot(
                 x="logDose",
@@ -411,17 +411,25 @@ def _run_experiment(
     plate = normalization_function(plate, layout, neg_control_id, min_dist=min_dist)
 
     mean_neg_ctrl = mean_controls(plate, layout, neg_control_id)
-    #results = collect_plate_results(layout, plate)
-    #plate_content["results"] = results
     results = collect_plate_results(layout, plate)
-    results_series = pd.Series(results, name="results")
-    # results[i] corresponds to compound neg_control_id - i - 2
-    neg_control_id = np.max(layout)
-    results_map = {
-        neg_control_id - i - 1: results[i]
-        for i in range(len(results))
-    }
-    plate_content["results"] = plate_content["compound"].map(results_map)
+
+    n_res = len(results)
+    n_rows = len(plate_content)
+
+    if n_res == n_rows:
+        # Layout encodes all wells (including replicates) directly.
+        plate_content["results"] = results
+    elif n_rows % n_res == 0:
+        # Layout encodes one replicate per compound×dose; plate_content has
+        # multiple replicates. Repeat the per-well results across replicates.
+        repeat = n_rows // n_res
+        plate_content["results"] = np.tile(results, repeat)
+    else:
+        raise ValueError(
+            f"results length {n_res} does not match plate_content length {n_rows}; "
+            "layout encoding and plate_content ordering must agree."
+        )
+
     return plate_content, mean_neg_ctrl
 
 

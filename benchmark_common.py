@@ -90,7 +90,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         color="#1b9e77",  # green
         plot_order=0,
         curve_example_file="plate_layout_40-12-8-3_01.npy",
-        curve_example_compounds=40,
+        curve_example_compounds=12,
         curve_example_concentrations=8,
         curve_example_replicates=3,
     ),
@@ -102,7 +102,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         color="#d95f02",  # orange
         plot_order=1,
         curve_example_file="plate_layout_20-12-8-3_01.npy",
-        curve_example_compounds=20,
+        curve_example_compounds=12,
         curve_example_concentrations=8,
         curve_example_replicates=3,
     ),

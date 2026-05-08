@@ -238,18 +238,18 @@ RESIDUALS_SCENARIO_GROUPS = [
     (
         "curve_info-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"residuals-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
     ),
     (
         "bowl-neg-control-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"residuals-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
     ),
     (
         "right-half-neg-control-log-new-reg",
         RIGHT_HALF_ERROR_LEVELS,
         lambda doses, dil, enl: (
-            f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}"
+            f"residuals-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}"
         ),
     ),
 ]
@@ -259,19 +259,19 @@ IC50_DMAX_R2_SCENARIO_GROUPS = [
     (
         "curve_info-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-        lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"percentage-low-r2-{doses}doses-dil{dil}-bowl-{enl}",
     ),
     (
         "bowl-neg-control-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-        lambda doses, dil, enl: f"-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"percentage-low-r2-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
     ),
     (
         "right-half-neg-control-log-new-reg",
         RIGHT_HALF_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
+        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
         None,  # no R² figure for right-half
     ),
 ]
@@ -305,7 +305,7 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
     )
     util.plot_barplot_residuals_data(
         r1, r2, r3,
-        fig_name="-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper",
+        fig_name="residuals-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper",
         y_max=450,
         fig_dir=fig_dir,
     )
@@ -419,6 +419,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
 
     for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in dose_response_curve_examples():
+        print("layouts:", layout_type)
         try:
             dilution = dilution_for(concentrations)
         except ValueError:

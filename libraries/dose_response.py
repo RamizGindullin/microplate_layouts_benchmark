@@ -577,9 +577,9 @@ def _run_one_plate(
         fit_table["b"], fit_table["c"], fit_table["d"], fit_table["e"]
     )
 
-    res_array = np.concatenate(fit_table["residuals"].to_numpy())
-    true_res_array = np.concatenate(fit_table["true_residuals"].to_numpy())
-    res_size = len(res_array)
+    res_array      = fit_table["residuals"].apply(np.mean).to_numpy()
+    true_res_array = fit_table["true_residuals"].apply(np.mean).to_numpy()
+    res_size       = len(res_array)
 
     # Residuals CSV columns (7):
     # ["layout", "error_type", "Error", "E", "rows lost", "residuals", "true_residuals"]

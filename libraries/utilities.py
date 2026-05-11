@@ -331,7 +331,8 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     
     fig,ax = plt.subplots(figsize=(4,3))
     palette = [spec.residuals_color for spec in DOSE_RESPONSE_LAYOUT_SPECS]
-    ax = sns.barplot(
+    
+    sns.barplot(
         data=residuals_df,
         x='Replicates', y='Residuals',
         hue='Layout type',
@@ -340,8 +341,9 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         hue_order=hue_order,
     )
     plt.ylabel("Mean residuals", fontsize=10)
-    y_top = y_max if y_max is not None else residuals_df["Residuals"].quantile(0.999)*1.25
-    ax.set_ylim(bottom=0, top=y_top)
+    
+    if not y_max is None:
+        ax.set_ylim(0, y_max)
     
     annotator = Annotator(
         ax,
@@ -358,11 +360,12 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         text_format='star',
         loc='inside',
         pvalue_thresholds=pvalue_thresholds,
-        text_offset=2,
+        text_offset=0,
         line_offset=0.05,
         fontsize = 6,
     )
     annotator.apply_and_annotate()
+    
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight', dpi=300)
     plt.close(fig)

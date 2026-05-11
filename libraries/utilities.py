@@ -133,6 +133,10 @@ def _stack_replicate_residuals_frames(replicate_arrays):
     df["residuals"] = pd.to_numeric(df["residuals"], errors="coerce")
     df["true_residuals"] = pd.to_numeric(df["true_residuals"], errors="coerce")
     df["rows lost"] = pd.to_numeric(df["rows lost"], errors="coerce")
+    # Replace inf from failed/diverged fits with NaN so downstream
+    # statistics (t-test, mean) are not contaminated
+    df["true_residuals"] = df["true_residuals"].replace([np.inf, -np.inf], np.nan)
+    df["residuals"] = df["residuals"].replace([np.inf, -np.inf], np.nan)
     return df
 
 
@@ -312,16 +316,19 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
 
     
     
-def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower center", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
+def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower right", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript. """
     residuals_df = _prepare_dose_response_residuals_frame(
         residuals_1rep, residuals_2rep, residuals_3rep
     )
     residuals_df = residuals_df.rename(columns={"replicates": "Replicates", "layout": "Layout type", "true_residuals": "Residuals"})
+    residuals_df["Replicates"] = residuals_df["Replicates"].astype(int)
     residuals_df = residuals_df[residuals_df['rows lost'] <= 1]
     if box_pairs is None:
         box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
-
+    
+    tmp = residuals_df[residuals_df["Replicates"]==1]
+    
     fig,ax = plt.subplots(figsize=(4,3))
     palette = [spec.residuals_color for spec in DOSE_RESPONSE_LAYOUT_SPECS]
     ax = sns.barplot(
@@ -330,9 +337,12 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         hue='Layout type',
         ax=ax,
         palette=sns.color_palette(palette, len(hue_order)),
-        hue_order=hue_order
+        hue_order=hue_order,
     )
     plt.ylabel("Mean residuals", fontsize=10)
+    y_top = y_max if y_max is not None else residuals_df["Residuals"].quantile(0.999)*1.25
+    ax.set_ylim(bottom=0, top=y_top)
+    
     annotator = Annotator(
         ax,
         data=residuals_df,
@@ -341,17 +351,19 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
         order=[1, 2, 3],
         hue='Layout type',
         hue_order=hue_order,
+        plot='barplot',
     )
     annotator.configure(
         test='t-test_ind',
         text_format='star',
         loc='inside',
         pvalue_thresholds=pvalue_thresholds,
-        text_offset=-1,
+        text_offset=2,
+        line_offset=0.05,
+        fontsize = 6,
     )
     annotator.apply_and_annotate()
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
-    ax.set_ylim(top=y_max)
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight', dpi=300)
     plt.close(fig)
 

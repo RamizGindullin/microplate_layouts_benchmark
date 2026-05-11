@@ -295,7 +295,7 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
                     r1, r2, r3,
                     fig_name=fig_name_fn(doses, dilution, error_nl),
                     y_max=450,
-                    leg_loc="upper center",
+                    leg_loc="lower center",
                     fig_dir=fig_dir,
                 )
 

@@ -372,7 +372,7 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
 
 def plot_barplot_replicate_data(
     data_1rep, data_2rep, data_3rep,
-    fig_name="", fig_dir="", fig_type="",
+    fig_name="", fig_dir="", fig_type="d_diff",
     y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8,
     pvalue_thresholds=None,
 ):
@@ -410,19 +410,29 @@ def plot_barplot_replicate_data(
         "layout", key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index)
     )
 
+    # Cast replicates to str so seaborn tick labels and Annotator order agree
+    results_df["replicates"] = results_df["replicates"].astype(str)
+    str_order = ["1", "2", "3"]
+
     if pvalue_thresholds is None:
         pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]]
 
     palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     hue_order = DOSE_RESPONSE_LAYOUT_ORDER
-    box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
 
-    # --- Determine plot column, filter, and y-label ---
+    # Build string-keyed box_pairs to match string replicates
+    box_pairs = [
+        ((str(rep), DOSE_RESPONSE_LAYOUT_ORDER[i]), (str(rep), DOSE_RESPONSE_LAYOUT_ORDER[j]))
+        for rep in (1, 2, 3)
+        for i in range(len(DOSE_RESPONSE_LAYOUT_ORDER))
+        for j in range(i + 1, len(DOSE_RESPONSE_LAYOUT_ORDER))
+    ]
+
+    # Determine plot column, filter, and y-label (do NOT mutate fig_type)
     if fig_type == "relic50":
         plot_col = "MSE"
         plot_data = results_df[results_df["MSE"] != np.inf]
         ylabel = "Mean absolute log10 difference"
-
     elif fig_type == "absic50":
         for col in ("e", "fit_e"):
             results_df[col] = pd.to_numeric(results_df[col], errors="coerce")
@@ -430,9 +440,7 @@ def plot_barplot_replicate_data(
         plot_col = "abs_e_diff"
         plot_data = results_df.dropna(subset=["abs_e_diff"])
         ylabel = "Mean absolute IC50 difference"
-
     else:
-        fig_type = "d_diff"
         plot_col = "diff_d"
         plot_data = results_df
         ylabel = "Mean absolute d difference"
@@ -442,19 +450,19 @@ def plot_barplot_replicate_data(
     if y_max:
         ax.set_ylim(top=y_max)
 
-    ax = sns.barplot(
+    sns.barplot(
         x="replicates", y=plot_col,
         data=plot_data,
         hue="layout", hue_order=hue_order,
-        palette=palette, legend=False, ax=ax,
+        order=str_order,
+        palette=palette, ax=ax,
     )
-    plt.ylabel(ylabel, fontsize=10)
-    plt.legend(fontsize=leg_fontsize, loc=leg_loc, ncol=leg_ncol)
+    ax.set_ylabel(ylabel, fontsize=10)
 
     annotator = Annotator(
         ax, pairs=box_pairs, data=plot_data,
         x="replicates", y=plot_col,
-        hue="layout", order=[1, 2, 3], hue_order=hue_order,
+        hue="layout", order=str_order, hue_order=hue_order,
     )
     annotator.configure(
         test="t-test_ind", text_format="star",
@@ -462,11 +470,14 @@ def plot_barplot_replicate_data(
     )
     annotator.apply_and_annotate()
 
+    # Draw legend AFTER annotations so handles are bar patches, not annotation lines
+    ax.legend(fontsize=leg_fontsize, loc=leg_loc, ncol=leg_ncol)
+
     fig.savefig(
         f"{fig_dir}dose-response-{fig_type}{fig_name}.png",
-        bbox_inches="tight",
+        bbox_inches="tight", dpi=300,
     )
-    plt.close(fig)  
+    plt.close(fig)
 
 
 def plot_r2_percentage(
@@ -474,7 +485,7 @@ def plot_r2_percentage(
     fig_name='', fig_dir='',
     y_max=None,
     leg_loc="upper right", leg_ncol=1, leg_fontsize=8,
-    hue_order=DOSE_RESPONSE_LAYOUT_ORDER,
+    hue_order=None,
     pvalue_thresholds=None,
     r2_threshold=0.8,
 ):
@@ -482,68 +493,66 @@ def plot_r2_percentage(
     Plotting the percentage of low-quality curves for dose-response simulations
     as in the manuscript.
     """
+    if hue_order is None:
+        hue_order = DOSE_RESPONSE_LAYOUT_ORDER
     if pvalue_thresholds is None:
         pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]]
 
-    # Build a stacked frame the same way as plot_barplot_replicate_data
     results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
     results_df["r2_score"] = pd.to_numeric(results_df["r2_score"], errors="coerce")
-
     results_df = results_df.sort_values(
         "layout", key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index)
     )
 
-    # Compute percentage of low-r2 curves per layout × replicate
-    rows = []
-    for layout in DOSE_RESPONSE_LAYOUT_ORDER:
-        for rep in [1, 2, 3]:
-            mask = (results_df["layout"] == layout) & (results_df["replicates"] == rep)
-            total = mask.sum()
-            if total == 0:
-                continue
-            low = (mask & (results_df["r2_score"] < r2_threshold)).sum()
-            rows.append({
-                "layout": layout,
-                "replicates": rep,
-                "pct_low_r2": 100.0 * low / total,
-            })
+    # Boolean indicator used for both the barplot (mean = percentage/100) and t-test
+    results_df["is_low_r2"] = (results_df["r2_score"] < r2_threshold).astype(float)
 
-    pct_df = pd.DataFrame(rows)
+    # Cast replicates to str so tick labels and Annotator order agree
+    results_df["replicates"] = results_df["replicates"].astype(str)
+    str_order = ["1", "2", "3"]
+
+    box_pairs = [
+        ((str(rep), hue_order[i]), (str(rep), hue_order[j]))
+        for rep in (1, 2, 3)
+        for i in range(len(hue_order))
+        for j in range(i + 1, len(hue_order))
+    ]
 
     palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     comparison_labels = list(hue_order)
 
     fig, ax = plt.subplots(figsize=(3.2, 3.2))
 
+    # Plot mean of is_low_r2 (0–1) directly; format y-axis as percentages
     sns.barplot(
         x="replicates",
-        y="pct_low_r2",
-        data=pct_df,
+        y="is_low_r2",
+        data=results_df,
         hue="layout",
-        hue_order=comparison_labels,
-        palette=sns.color_palette(palette, len(comparison_labels)),
+        hue_order=hue_order,
+        order=str_order,
+        palette=sns.color_palette(palette, len(hue_order)),
         ax=ax,
     )
-    plt.ylabel("Percentage of low quality curves", fontsize=10)
-    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+
+    # Format y-axis as 0-100% ticks
+    ax.yaxis.set_major_formatter(
+        matplotlib.ticker.FuncFormatter(lambda val, _: f"{val*100:.0f}")
+    )
+    ax.set_ylabel("Percentage of low quality curves", fontsize=10)
 
     if y_max is not None:
-        ax.set_ylim(top=y_max)
-
-    # NOTE: the annotator needs the full (non-aggregated) data and the raw
-    # r2-based column so the t-test has per-compound observations to compare.
-    # We pass a boolean 0/1 column derived from r2_score as the test variable.
-    results_df["is_low_r2"] = (results_df["r2_score"] < r2_threshold).astype(float)
+        ax.set_ylim(top=y_max / 100.0)  # caller passes 0-100, internal is 0-1
 
     annotator = Annotator(
         ax,
-        pairs=DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
+        pairs=box_pairs,
         data=results_df,
         x="replicates",
         y="is_low_r2",
         hue="layout",
-        order=[1, 2, 3],
-        hue_order=comparison_labels,
+        order=str_order,
+        hue_order=hue_order,
     )
     annotator.configure(
         test="t-test_ind",
@@ -554,9 +563,11 @@ def plot_r2_percentage(
     )
     annotator.apply_and_annotate()
 
+    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+
     fig.savefig(
         fig_dir + "percentage-low-r2" + fig_name + ".png",
-        bbox_inches="tight"
+        bbox_inches="tight", dpi=300,
     )
     plt.close(fig)
 

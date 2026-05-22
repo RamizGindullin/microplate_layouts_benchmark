@@ -256,24 +256,29 @@ RESIDUALS_SCENARIO_GROUPS = [
 ]
 
 
+# Each tuple: (id_text, error_levels, ic50_fig_name_fn, r2_fig_name_fn)
+# ic50_fig_name_fn is used for d_diff / relic50 / absic50
+#   filename: dose-response-{fig_type}{ic50_fig_name_fn(...)}.png
+# r2_fig_name_fn is used for percentage-low-r2
+#   filename: percentage-low-r2{r2_fig_name_fn(...)}.png
 IC50_DMAX_R2_SCENARIO_GROUPS = [
     (
         "curve_info-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-        lambda doses, dil, enl: f"percentage-low-r2-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
+        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
     ),
     (
         "bowl-neg-control-new-reg",
         BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-        lambda doses, dil, enl: f"percentage-low-r2-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
+        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
     ),
     (
         "right-half-neg-control-log-new-reg",
         RIGHT_HALF_ERROR_LEVELS,
-        lambda doses, dil, enl: f"percentage-low-r2-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
-        None,  # no R² figure for right-half
+        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
+        None,
     ),
 ]
 
@@ -329,14 +334,14 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
                 common_kwargs = dict(
                     fig_name=fig_name,
                     fig_dir=fig_dir,
-                    leg_loc="upper center",
+                    leg_loc="lower center",
                     leg_ncol=3,
                     leg_fontsize=8,
                 )
 
                 # d_max
                 util.plot_barplot_replicate_data(
-                    abs_1, abs_2, abs_3, fig_type="", **common_kwargs
+                    abs_1, abs_2, abs_3, fig_type="d_diff", **common_kwargs
                 )
                 # Relative IC50
                 util.plot_barplot_replicate_data(

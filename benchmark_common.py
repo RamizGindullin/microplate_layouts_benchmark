@@ -208,7 +208,9 @@ def screening_control_figure_cases():
         if spec.control_example_file is not None and spec.control_figure_output is not None
     ]
 
-DOSE_RESPONSE_LAYOUT_ORDER = [spec.display_type for spec in DOSE_RESPONSE_LAYOUT_SPECS]
+DOSE_RESPONSE_LAYOUT_ORDER = [
+    spec.display_type for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.residuals_plot_order)
+]
 DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER = [
     spec.display_type
     for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.residuals_plot_order)

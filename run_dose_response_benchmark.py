@@ -301,7 +301,6 @@ def generate_residuals_figures(cfg: DoseResponseConfig) -> None:
                     r1, r2, r3,
                     fig_name=fig_name_fn(doses, dilution, error_nl),
                     y_max=450,
-                    leg_loc="lower center",
                     fig_dir=fig_dir,
                 )
 
@@ -334,7 +333,6 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
                 common_kwargs = dict(
                     fig_name=fig_name,
                     fig_dir=fig_dir,
-                    leg_loc="lower center",
                     leg_ncol=3,
                     leg_fontsize=8,
                 )
@@ -357,7 +355,6 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
                         rel_1, rel_2, rel_3,
                         fig_name=r2_fig_name_fn(doses, dilution, error_nl),
                         fig_dir=fig_dir,
-                        leg_loc="upper right",
                         leg_ncol=1,
                         leg_fontsize=8,
                     )

@@ -370,7 +370,12 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight', dpi=300)
     plt.close(fig)
 
-def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fig_dir="", fig_type="", y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8, pvalue_thresholds=None):
+def plot_barplot_replicate_data(
+    data_1rep, data_2rep, data_3rep,
+    fig_name="", fig_dir="", fig_type="",
+    y_max=None, leg_ncol=1, leg_loc="best", leg_fontsize=8,
+    pvalue_thresholds=None,
+):
     """ Plots barplots for absolute and relative EC50/IC50 for dose response experiments as in the manuscript. 
         It also plots d_diff, that is, the average difference between the expected and obtained maximum (d) of the
         dose-response 4PL sigmoid curve.
@@ -391,100 +396,170 @@ def plot_barplot_replicate_data(data_1rep, data_2rep, data_3rep, fig_name="", fi
     
     results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
 
-    results_df['MSE'] = pd.to_numeric(results_df['MSE'], errors='coerce')
-    results_df['E'] = pd.to_numeric(results_df['E'], errors='coerce')
-    results_df['r2_score'] = pd.to_numeric(results_df['r2_score'], errors='coerce')
-    results_df['d'] = pd.to_numeric(results_df['d'], errors='coerce')
-    results_df['fit_d'] = pd.to_numeric(results_df['fit_d'], errors='coerce')
+    # Coerce numeric columns
+    for col in ("MSE", "E", "r2_score", "d", "fit_d"):
+        results_df[col] = pd.to_numeric(results_df[col], errors="coerce")
 
-    results_df.insert(0, 'diff_d', 0)
-    results_df['diff_d'] = abs(results_df['d'] - results_df['fit_d'])
+    # Drop rows where MSE is NaN (failed fits)
+    results_df = results_df[results_df["MSE"].notna()]
 
-    results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
+    # Derived columns
+    results_df["diff_d"] = (results_df["d"] - results_df["fit_d"]).abs()
 
-    results_df = results_df.sort_values('layout', key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index))
-
-    fig, ax = plt.subplots(figsize=(4, 3))
+    results_df = results_df.sort_values(
+        "layout", key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index)
+    )
 
     if pvalue_thresholds is None:
-        # * indicates p < 10−4, ** indicates p < 10−12, *** indicates p < 10−43.
-        pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]] #[1e-64, "****"], 
+        pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]]
 
-    # box_pairs parameter is intentionally not exposed to callers for this function;
-    # the replicate-level pairs are always used so statistical annotations are
-    # consistent across all barplot figures.
-    box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
+    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     hue_order = DOSE_RESPONSE_LAYOUT_ORDER
+    box_pairs = DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE
 
-    if y_max:
-        ax.set_ylim(top = y_max)
-    
-    ## Plotting
-    plot_col = "MSE"
+    # --- Determine plot column, filter, and y-label ---
     if fig_type == "relic50":
-        # Dose-response layout colours are derived from the registry so adding a new
-        # layout only requires updating DOSE_RESPONSE_LAYOUT_SPECS.
-        palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
-        ax = sns.barplot(
-            x='replicates',
-            y="MSE",
-            data=results_df[results_df['MSE'] != np.inf],
-            hue="layout",
-            hue_order=hue_order,
-            palette=palette,
-            legend=False,
-        )
-        plt.ylabel("Mean absolute log10 difference", fontsize=10)
+        plot_col = "MSE"
+        plot_data = results_df[results_df["MSE"] != np.inf]
+        ylabel = "Mean absolute log10 difference"
 
     elif fig_type == "absic50":
-        ax = sns.barplot(x='replicates', y="MSE", data=results_df[results_df['MSE']!=np.inf], hue="layout", hue_order=hue_order, palette=[s.color for s in DOSE_RESPONSE_LAYOUT_SPECS], legend=False)
-        plt.ylabel("Mean absolute log10 difference", fontsize=10)
+        for col in ("e", "fit_e"):
+            results_df[col] = pd.to_numeric(results_df[col], errors="coerce")
+        results_df["abs_e_diff"] = (results_df["e"] - results_df["fit_e"]).abs()
+        plot_col = "abs_e_diff"
+        plot_data = results_df.dropna(subset=["abs_e_diff"])
+        ylabel = "Mean absolute IC50 difference"
 
     else:
-        ax = sns.barplot(x='replicates', y="diff_d", data=results_df, hue="layout", hue_order=hue_order, palette=[s.color for s in DOSE_RESPONSE_LAYOUT_SPECS], legend=False)
-        plt.ylabel("Mean absolute d difference", fontsize=10)
         fig_type = "d_diff"
         plot_col = "diff_d"
+        plot_data = results_df
+        ylabel = "Mean absolute d difference"
 
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(4, 3))
+    if y_max:
+        ax.set_ylim(top=y_max)
 
-    plt.legend(fontsize = leg_fontsize, loc = leg_loc, ncol = leg_ncol)
+    ax = sns.barplot(
+        x="replicates", y=plot_col,
+        data=plot_data,
+        hue="layout", hue_order=hue_order,
+        palette=palette, legend=False, ax=ax,
+    )
+    plt.ylabel(ylabel, fontsize=10)
+    plt.legend(fontsize=leg_fontsize, loc=leg_loc, ncol=leg_ncol)
 
-    plot_data = results_df[results_df["MSE"] != np.inf] if plot_col == "MSE" else results_df
-    annotator = Annotator(ax, pairs=box_pairs, data=plot_data, x='replicates', y=plot_col, hue='layout', order=[1,2,3],hue_order=hue_order)
-    annotator.configure(test='t-test_ind', text_format='star', loc='inside',pvalue_thresholds=pvalue_thresholds, text_offset=-1)
+    annotator = Annotator(
+        ax, pairs=box_pairs, data=plot_data,
+        x="replicates", y=plot_col,
+        hue="layout", order=[1, 2, 3], hue_order=hue_order,
+    )
+    annotator.configure(
+        test="t-test_ind", text_format="star",
+        loc="inside", pvalue_thresholds=pvalue_thresholds, text_offset=-1,
+    )
     annotator.apply_and_annotate()
 
-    fig.savefig(fig_dir+"dose-response-"+fig_type+fig_name+".png",bbox_inches='tight',dpi=800)
-    plt.close(fig)
-    
-    
-    
-    
-    
-    
-    
-def plot_r2_percentage(data_1rep, data_2rep, data_3rep, fig_name='', fig_dir='', y_max=None, leg_loc="upper left", leg_ncol=1, leg_fontsize=8, hue_order=DOSE_RESPONSE_LAYOUT_ORDER):
-    """
-    Plotting the percentage of low-quality curves for dose-response simulations as in the manuscript.
-    """
-    results_df = _prepare_dose_response_results_frame(data_1rep, data_2rep, data_3rep)
-    results_df = _coerce_numeric_column(results_df, "r2_score")
-    results_df["low_quality_curve"] = results_df["r2_score"] < 0.8
-    low_r2 = (
-        results_df.groupby(["replicates", "layout"], as_index=False)["low_quality_curve"]
-        .mean()
-        .rename(columns={"replicates": "Replicate", "layout": "Layout type", "low_quality_curve": "Residuals"})
+    fig.savefig(
+        f"{fig_dir}dose-response-{fig_type}{fig_name}.png",
+        bbox_inches="tight",
     )
-    low_r2["Residuals"] = low_r2["Residuals"] * 100.0
+    plt.close(fig)  
+
+
+def plot_r2_percentage(
+    data_1rep, data_2rep, data_3rep,
+    fig_name='', fig_dir='',
+    y_max=None,
+    leg_loc="upper right", leg_ncol=1, leg_fontsize=8,
+    hue_order=DOSE_RESPONSE_LAYOUT_ORDER,
+    pvalue_thresholds=None,
+    r2_threshold=0.8,
+):
+    """
+    Plotting the percentage of low-quality curves for dose-response simulations
+    as in the manuscript.
+    """
+    if pvalue_thresholds is None:
+        pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]]
+
+    # Build a stacked frame the same way as plot_barplot_replicate_data
+    results_df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
+    results_df["r2_score"] = pd.to_numeric(results_df["r2_score"], errors="coerce")
+
+    results_df = results_df.sort_values(
+        "layout", key=lambda s: s.apply(DOSE_RESPONSE_LAYOUT_ORDER.index)
+    )
+
+    # Compute percentage of low-r2 curves per layout × replicate
+    rows = []
+    for layout in DOSE_RESPONSE_LAYOUT_ORDER:
+        for rep in [1, 2, 3]:
+            mask = (results_df["layout"] == layout) & (results_df["replicates"] == rep)
+            total = mask.sum()
+            if total == 0:
+                continue
+            low = (mask & (results_df["r2_score"] < r2_threshold)).sum()
+            rows.append({
+                "layout": layout,
+                "replicates": rep,
+                "pct_low_r2": 100.0 * low / total,
+            })
+
+    pct_df = pd.DataFrame(rows)
+
+    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     comparison_labels = list(hue_order)
 
-    fig,ax = plt.subplots(figsize=(3.2,3.2))
-    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
-    sns.boxplot(data=low_r2, x='Replicate', y='Residuals', hue='Layout type', ax=ax, palette=palette, hue_order=comparison_labels)
+    fig, ax = plt.subplots(figsize=(3.2, 3.2))
+
+    sns.barplot(
+        x="replicates",
+        y="pct_low_r2",
+        data=pct_df,
+        hue="layout",
+        hue_order=comparison_labels,
+        palette=sns.color_palette(palette, len(comparison_labels)),
+        ax=ax,
+    )
+    plt.ylabel("Percentage of low quality curves", fontsize=10)
     ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
-    ax.set_ylim(top=y_max)
-    fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight')
+
+    if y_max is not None:
+        ax.set_ylim(top=y_max)
+
+    # NOTE: the annotator needs the full (non-aggregated) data and the raw
+    # r2-based column so the t-test has per-compound observations to compare.
+    # We pass a boolean 0/1 column derived from r2_score as the test variable.
+    results_df["is_low_r2"] = (results_df["r2_score"] < r2_threshold).astype(float)
+
+    annotator = Annotator(
+        ax,
+        pairs=DOSE_RESPONSE_LAYOUT_BOX_PAIRS_BY_REPLICATE,
+        data=results_df,
+        x="replicates",
+        y="is_low_r2",
+        hue="layout",
+        order=[1, 2, 3],
+        hue_order=comparison_labels,
+    )
+    annotator.configure(
+        test="t-test_ind",
+        text_format="star",
+        loc="inside",
+        pvalue_thresholds=pvalue_thresholds,
+        text_offset=-1,
+    )
+    annotator.apply_and_annotate()
+
+    fig.savefig(
+        fig_dir + "percentage-low-r2" + fig_name + ".png",
+        bbox_inches="tight"
+    )
     plt.close(fig)
+
 
 # TODO(dead-code): create_latex_table is superseded by create_latex_table_wide.
 # Not called by any benchmark script.

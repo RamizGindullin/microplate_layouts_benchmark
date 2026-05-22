@@ -311,10 +311,6 @@ def plot_well_series_precomputed_normalization(plate_array, norm_plate, layout, 
     if filename:
         fig.savefig(filename)
     
-
-    
-
-    
     
 def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, fig_name, y_max=None, leg_loc="lower right", leg_ncol=3, leg_fontsize=8, pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]], hue_order=DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER, box_pairs=None, fig_dir=''):
     """ Plots residual plots for dose response experiments as in the manuscript. """
@@ -366,7 +362,12 @@ def plot_barplot_residuals_data(residuals_1rep, residuals_2rep, residuals_3rep, 
     )
     annotator.apply_and_annotate()
     
-    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+    #ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+    ax.legend(
+        loc="lower center", bbox_to_anchor=(0.58, 1.01),
+        ncol=len(hue_order), fontsize=8,
+        borderaxespad=0
+    )
     fig.savefig(fig_dir + fig_name + '.png', bbox_inches='tight', dpi=300)
     plt.close(fig)
 
@@ -471,7 +472,12 @@ def plot_barplot_replicate_data(
     annotator.apply_and_annotate()
 
     # Draw legend AFTER annotations so handles are bar patches, not annotation lines
-    ax.legend(fontsize=leg_fontsize, loc=leg_loc, ncol=leg_ncol)
+    #ax.legend(fontsize=leg_fontsize, loc=leg_loc, ncol=leg_ncol)
+    ax.legend(
+        loc="lower center", bbox_to_anchor=(0.58, 1.01),
+        ncol=len(hue_order), fontsize=8,
+        borderaxespad=0
+    )
 
     fig.savefig(
         f"{fig_dir}dose-response-{fig_type}{fig_name}.png",
@@ -563,7 +569,11 @@ def plot_r2_percentage(
     )
     annotator.apply_and_annotate()
 
-    ax.legend(loc=leg_loc, ncol=leg_ncol, fontsize=leg_fontsize)
+    ax.legend(
+        loc="lower center", bbox_to_anchor=(0.58, 1.01),
+        ncol=len(hue_order), fontsize=8,
+        borderaxespad=0
+    )
 
     fig.savefig(
         fig_dir + "percentage-low-r2" + fig_name + ".png",

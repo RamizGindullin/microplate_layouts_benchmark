@@ -122,6 +122,7 @@ def fit_data(
     """
     compound_data = result_data.groupby("compound")
     fit_data_list = []
+    failed_fits = []
 
     for name, group_t in compound_data:
         warnings.filterwarnings(
@@ -190,6 +191,11 @@ def fit_data(
 
             except Exception:
                 print("Curve fit failed (too many iterations or convergence error)")
+                failed_fits.append({
+                    "layout": layout_type,
+                    "compound": name,
+                    "reason": str(exc),
+                })
                 cur_fit = dict(
                     [("b", float("nan")), ("c", float("nan")),
                      ("d", float("nan")), ("e", float("nan")),
@@ -277,7 +283,13 @@ def fit_data(
             plt.close()
 
         fit_data_list.append(cur_fit)
-
+    
+    if failed_fits:
+        failed_df = pd.DataFrame(failed_fits)
+        failed_path = os.path.join(output_dir, f"failed_fits-{layout_type}.csv")
+        failed_df.to_csv(failed_path, mode="a", index=False,
+                         header=not os.path.exists(failed_path))
+    
     return pd.DataFrame(fit_data_list).set_index("compound")
 
 

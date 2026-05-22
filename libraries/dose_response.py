@@ -736,7 +736,7 @@ def full_dose_response_evaluation(
                 print(f"  Using {plate_type['display_type']} layouts...")
                 layout_dir = plate_type["dir"]
                 try:
-                    layouts = os.listdir(layout_dir)
+                    layouts = sorted(os.listdir(layout_dir))
                 except FileNotFoundError:
                     print(f"    WARNING: layout directory not found: {layout_dir!r}")
                     continue

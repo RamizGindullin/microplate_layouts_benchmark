@@ -209,7 +209,7 @@ def _shape_layout(layout, num_rows, num_columns, size_empty_edge):
 # TODO(dead-code): check_duplicated_layouts is not called by any benchmark script.
 def check_duplicated_layouts(layout_dir = 'screening_manual_layouts/'):
 
-    layouts = os.listdir(layout_dir)
+    layouts = sorted(os.listdir(layout_dir))
     duplicates = False
     
     for layout_file in layouts:

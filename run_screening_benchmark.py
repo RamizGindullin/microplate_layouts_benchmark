@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Iterable, List, Tuple
 
 import numpy as np
+np.random.seed(42)
 import pandas as pd
 from sklearn import metrics as skmetrics
 
@@ -219,7 +220,7 @@ def simulate_condition(
             )
             for plate_type in plate_types:
                 layout_dir = plate_type.dir
-                layouts = os.listdir(layout_dir)
+                layouts = sorted(os.listdir(layout_dir))
 
                 for layout_file in layouts:
                     match = re.search(plate_type.regex, layout_file)

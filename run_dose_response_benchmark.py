@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import numpy as np
+np.random.seed(42)
 import pandas as pd  # used in generate_example_curves (df_params)
 
 import libraries.disturbances as dt

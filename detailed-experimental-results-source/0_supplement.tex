@@ -1,0 +1,90 @@
+\documentclass
+{article}
+\usepackage[margin=1in]{geometry}
+
+\usepackage{authblk}
+
+\title{Constraint Optimization of MicroPlate Designs:\\supplementary materials}
+\author{Ramiz Gindullin\textsuperscript{\rm 1}, Mar\'ia~Andre\'ina Francisco~Rodr\'iguez\textsuperscript{\rm 1}}
+\affil{\small
+    \textsuperscript{\rm 1}Uppsala University, Sweden\\
+    {Ramiz.Gindullin@it.uu.se}, {Maria.Andreina.Francisco@it.uu.se}
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\input{0c_packages}
+\input{0c_macros}
+
+\begin{document}
+
+
+\maketitle
+
+\begin{abstract}
+    We present detailed results of computational experiments of the paper published in the proceedings of the 2026 AAAI conference~\cite{gindullin26compd}.
+\end{abstract}
+
+\section*{Overview}
+
+Here we provide the complete list of figures and tables containing replicated results of replicated experiments~\cite{replicated_experiments} of the paper~\cite{plaid2023} (we will use `the PLAID paper' for brevity):
+
+\begin{itemize}
+    \item Figures~\ref{fig:dose_response_paper} and \ref{fig:screening} correspond to Figures~2 and 3 (resp.) of the PLAID paper;
+
+    \item Figures~\ref{fig:dose-response-curves}--\ref{fig:screening-ssmd-collection-10-10-stdev-3} correspond to Figures~1--24 (resp.) from the supplementary materials of the PLAID paper,
+
+    \item Tables~\ref{tab:pvalues-ic50-half-columns-neg-controls-0.4}--\ref{tab:screening-pr_pvalues-10-10-0.2} correspond to Tables~1--5 (resp.) from the supplementary materials of the PLAID paper.
+\end{itemize}
+
+Figures~\ref{fig:dose_response_paper}  and Figures~\ref{fig:dose-response-curves}--\ref{fig:dr_percentage_column_neg} showcase various results of dose-response experiments.
+
+Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild}--\ref{fig:screening-ssmd-collection-10-10-stdev-3} showcase various results of screening experiments.
+
+
+\input{tikz-figures/dose_response__paper}
+\input{tikz-figures/screening_data__paper}
+
+\input{tikz-figures/dose_response_dr_curves}
+
+\input{tikz-figures/dose_response_d_dist_bowl_no_neg}
+\input{tikz-figures/dose_response_d_dist_bowl_neg}
+\input{tikz-figures/dose_response_d_dist_column_neg}
+
+\input{tikz-figures/dose_response_relic50_bowl_no_neg}
+\input{tikz-figures/dose_response_relic50_bowl_neg}
+\input{tikz-figures/dose_response_relic50_column_neg}
+
+\input{tikz-figures/dose_response_absic50_bowl_no_neg}
+\input{tikz-figures/dose_response_absic50_bowl_neg}
+\input{tikz-figures/dose_response_absic50_column_neg}
+
+\input{tikz-figures/dose_response_residuals_bowl_no_neg}
+\input{tikz-figures/dose_response_residuals_column_neg}
+
+\input{tikz-figures/dose_response_percentage_bowl_no_neg}
+\input{tikz-figures/dose_response_percentage_bowl_neg}
+\input{tikz-figures/dose_response_percentage_column_neg}
+
+\input{tikz-figures/screening_data_expected_obtained1}
+\input{tikz-figures/screening_data_expected_obtained2}
+\input{tikz-figures/screening_data_expected_obtained3}
+
+\input{tikz-figures/screening_data_roc_strong}
+\input{tikz-figures/screening_data_roc_strong_8_8}
+
+\input{tikz-figures/screening_data_pr_strong}
+\input{tikz-figures/screening_data_pr_strong_8_8}
+
+\input{tikz-figures/screening_data_z_factor}
+\input{tikz-figures/screening_data_ssmd}
+
+
+\input{b_table_stats}
+
+\bibliographystyle{plain}
+\bibliography{compd_bibliography}
+
+
+\end{document}

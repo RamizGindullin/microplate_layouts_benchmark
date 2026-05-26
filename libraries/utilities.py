@@ -924,7 +924,7 @@ def _plot_roc_pr_all_batches(ax, df, display_type, color, curve_type):
             interp_curves.append(np.interp(grid, fpr, tpr))
         else:
             precision, recall, _ = metrics.precision_recall_curve(y_true, y_score)
-            auc_vals.append(metrics.auc(recall, precision))
+            auc_vals.append(metrics.average_precision_score(y_true, y_score))
             # precision_recall_curve returns decreasing recall; reverse for interp
             interp_curves.append(np.interp(grid, recall[::-1], precision[::-1]))
 

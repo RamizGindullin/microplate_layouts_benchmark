@@ -366,16 +366,28 @@ def generate_ic50_dmax_r2_figures(cfg: DoseResponseConfig) -> None:
     abs_1, abs_2, abs_3 = _load_csv_triple(
         cfg, "absolute_ic50_data", 8, 8, 0.4, "right-half-neg-control-log-new-reg"
     )
-    paper_kwargs = dict(
-        fig_name="-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper",
-        fig_dir=fig_dir,
-        leg_loc="upper center",
-        leg_ncol=3,
-        leg_fontsize=8,
+    # d_diff and absic50 use "right-half" in the filename; relic50 keeps "half-columns".
+    # These two substrings must NOT be unified — they match different naming conventions
+    # in the LaTeX sources and must correspond exactly to the filenames referenced there.
+    _paper_common = dict(fig_dir=fig_dir, leg_loc="upper center", leg_ncol=3, leg_fontsize=8)
+    # - dose-response-d_diff-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper.png
+    util.plot_barplot_replicate_data(
+        abs_1, abs_2, abs_3, fig_type="",
+        fig_name="d_diff-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper",
+        **_paper_common,
     )
-    util.plot_barplot_replicate_data(abs_1, abs_2, abs_3, fig_type="", **paper_kwargs)
-    util.plot_barplot_replicate_data(rel_1, rel_2, rel_3, fig_type="relic50", **paper_kwargs)
-    util.plot_barplot_replicate_data(abs_1, abs_2, abs_3, fig_type="absic50", **paper_kwargs)
+    # - dose-response-relic50-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper.png
+    util.plot_barplot_replicate_data(
+        rel_1, rel_2, rel_3, fig_type="relic50",
+        fig_name="-1-2-3-8doses-dil8-half-columns-neg-controls-0.4_paper",
+        **_paper_common,
+    )
+    # - dose-response-absic50-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper.png
+    util.plot_barplot_replicate_data(
+        abs_1, abs_2, abs_3, fig_type="absic50",
+        fig_name="-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper",
+        **_paper_common,
+    )
 
 
 def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:

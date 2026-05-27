@@ -13,7 +13,7 @@ Stages:
   simulate : generate CSVs under generated-data/dose-response/
   figures  : generate supplement PNGs under generated-plots/dose-response-supplement/
   curves   : generate example curve PNGs under figures/
-  all      : simulate → figures → curves  (default)
+  all      : simulate to figures to curves  (default)
 """
 
 from __future__ import annotations
@@ -106,9 +106,9 @@ class DoseResponseConfig:
         default_factory=lambda: Path("generated-data") / "dose-response"
     )
     figures_dir: Path = field(
-        default_factory=lambda: Path("generated-plots") / "dose-response-supplement"
+        default_factory=lambda: Path("detailed-experimental-results-source") / "detailed-experimental-results-source/"
     )
-    paper_figures_dir: Path = field(default_factory=lambda: Path("figures"))
+    paper_figures_dir: Path = field(default_factory=lambda: Path("detailed-experimental-results-source") / "detailed-experimental-results-source/")
 
     concentrations_list: List[int] = field(default_factory=lambda: [6, 8, 12])
     replicates_list: List[int] = field(default_factory=lambda: [1, 2, 3])

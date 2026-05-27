@@ -3,28 +3,7 @@
 \end{figure*}
 
 \begin{table*}[!t]
-    \centering
-    \begin{tabular}{cccccccc}
-    \toprule
-       & Hit-Rate &  1\% & 5\% & 10\% & 20\% & 30\% & 40\% \\ 
-    \midrule
-    \multirow{3}{*}{\rotatebox[origin=c]{90}{$\begin{array}{c}
-         \text{ROC}\\
-         \text{-AUC}
-    \end{array}$}}
-        & Random & 0.93  $\pm$ (0.004) & 0.93  $\pm$ (0.007) & 0.93  $\pm$ (0.004) & 0.93  $\pm$ (0.003) & 0.93  $\pm$ (0.002) & 0.93  $\pm$ (0.003)\\
-        & PLAID  & 0.96  $\pm$ (0.002) & 0.96  $\pm$ (0.004) & 0.96  $\pm$ (0.002) & 0.96  $\pm$ (0.002) & 0.96  $\pm$ (0.002) & 0.97  $\pm$ (0.002)\\
-        & COMPD  & \bf 0.97  $\pm$ (0.002) & \bf 0.98  $\pm$ (0.002) & \bf 0.98  $\pm$ (0.002) & \bf 0.98  $\pm$ (0.001) & \bf 0.98  $\pm$ (0.001) & \bf 0.98  $\pm$ (0.001) \\
-    \midrule
-    \multirow{3}{*}{\rotatebox[origin=c]{90}{$\begin{array}{c}
-         \text{PR}\\
-         \text{-AUC}
-    \end{array}$}}
-        & Random & 0.68  $\pm$ (0.032) & 0.77  $\pm$ (0.017) & 0.82  $\pm$ (0.017) & 0.87  $\pm$ (0.005) & 0.91  $\pm$ (0.003) & 0.93  $\pm$ (0.004)\\
-        & PLAID  & 0.78  $\pm$ (0.009) & 0.84  $\pm$ (0.008) & 0.88  $\pm$ (0.005) & 0.92  $\pm$ (0.004) & 0.94  $\pm$ (0.002) & 0.96  $\pm$ (0.002)\\
-        & COMPD  & \bf 0.84  $\pm$ (0.007) & \bf 0.9   $\pm$ (0.007) & \bf 0.92  $\pm$ (0.005) & \bf 0.95  $\pm$ (0.001) & \bf 0.97  $\pm$ (0.002) & \bf 0.97  $\pm$ (0.001) \\
-    \bottomrule
-    \end{tabular}
+    \input{latex-tables/screening_pr_10-10-0.2}
     \caption{Mean and standard deviation of the ROC-AUC and the PR-AUC obtained for
       10 screening experiments with varying hit rates, using layouts
       with 10 positive and 10 negative controls in the presence of

@@ -448,7 +448,7 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
 
 def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
     """Control layout visualisations referenced by tikz-figures/a_figure_controls.tex."""
-    ensure_dir(Path("figures"))
+    ensure_dir(Path("detailed-experimental-results-source") / "detailed-experimental-results-source/")
 
     neg_control_mean = 90
     pos_control_mean = 60
@@ -473,7 +473,7 @@ def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
         shared_disturbed,
         title="",
         mask=None,
-        filename="figures/plate_rows-error-base.png",
+        filename="detailed-experimental-results-source/figures/plate_rows-error-base.png",
         vmin=vmin, vmax=vmax
     )
 

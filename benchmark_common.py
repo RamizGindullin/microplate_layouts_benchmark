@@ -138,7 +138,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         color="#59296e",
         plot_order=0,
         control_example_file="plate_layout_rand_10-10_02.npy",
-        control_figure_output="figures/plate_random-controls-rows-error.png",
+        control_figure_output="detailed-experimental-results-source/figures/plate_random-controls-rows-error.png",
     ),
     LayoutSpec(
         key="plaid",
@@ -148,7 +148,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         color="#cc0253",
         plot_order=1,
         control_example_file="plate_layout_10-10_01.npy",
-        control_figure_output="figures/plate_plaid-controls-rows-error.png",
+        control_figure_output="detailed-experimental-results-source/figures/plate_plaid-controls-rows-error.png",
     ),
     LayoutSpec(
         key="compd",
@@ -158,7 +158,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         color="#e68302",
         plot_order=2,
         control_example_file="plate_layout_10-10_01.npy",
-        control_figure_output="figures/plate_compd-controls-rows-error.png",
+        control_figure_output="detailed-experimental-results-source/figures/plate_compd-controls-rows-error.png",
     ),
 ]
 

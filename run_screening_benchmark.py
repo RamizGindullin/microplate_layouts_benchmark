@@ -299,7 +299,7 @@ def simulate_condition(
                                     layout, limit["from"], limit["to"]
                                 )
                                 norm_plate = plate_type.error_correction(
-                                    plate, layout, neg_control_id
+                                    plate, remaining_layout, neg_control_id
                                 )
                                 (
                                     norm_neg_mean, norm_pos_mean,
@@ -344,9 +344,13 @@ def simulate_condition(
                                 2,
                             )
                             comp_id_array = np.reshape(remaining_layout, (-1, 1))
-                            ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
+                            ideal_plate_array = np.reshape(
+                                dt.lose_rows(ideal_plate, limit["from"], limit["to"]), (-1, 1)
+                            )
                             norm_plate_array = np.reshape(norm_plate, (-1, 1))
-                            activity_array = np.reshape(activity_layout, (-1, 1))
+                            activity_array = np.reshape(
+                                dt.lose_rows(activity_layout, limit["from"], limit["to"]), (-1, 1)
+                            )
 
                             comp_id_res_df = pd.DataFrame(
                                 np.hstack([

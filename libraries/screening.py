@@ -94,7 +94,7 @@ def test_quality_assessment_metrics(plate_types,error_types,error,id_text,neg_co
     ## Results
     today = run_tag if run_tag is not None else (date.today()).strftime("%Y%m%d")+"-"+id_text
     screening_scores_data_filename = 'screening_metrics_data-'+str(neg_controls)+'-'+str(pos_controls)+'-'+str(error)+'-'+today+'.csv'
-    screening_scores_data_f=open(data_directory+screening_scores_data_filename,'a')
+    screening_scores_data_f=open(data_directory+screening_scores_data_filename,'w')
 
     # Write headers
     scores_writer = csv.writer(screening_scores_data_f)

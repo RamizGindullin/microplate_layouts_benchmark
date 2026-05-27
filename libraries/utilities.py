@@ -883,6 +883,14 @@ def _load_screening_residuals(residuals_filename):
     """
     df = pd.read_csv(residuals_filename)
     df = df[df.lost_rows < 1].copy()
+    
+    # Screening uses inhibition convention: neg_control_mean > pos_control_mean.
+    # Lower obtained_result = more inhibited = higher hit probability.
+    # Negate so that sklearn scorers (higher = more likely positive) work correctly.
+    # ASSERTION: if mean(pos) > mean(neg) in your assay, flip this sign.
+    assert df["obtained_result"].mean() > 0, "Unexpected negative obtained_result mean"
+    df["obtained_result_inv"] = -df["obtained_result"]
+    
     # Validate display_type values against the registry early so mismatches
     # surface with a clear error rather than silently empty plots.
     _classify_screening_layout_series(df["display_type"])

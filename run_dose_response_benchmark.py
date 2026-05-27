@@ -106,9 +106,11 @@ class DoseResponseConfig:
         default_factory=lambda: Path("generated-data") / "dose-response"
     )
     figures_dir: Path = field(
-        default_factory=lambda: Path("detailed-experimental-results-source") / "detailed-experimental-results-source/"
+        default_factory=lambda: Path("detailed-experimental-results-source") / "figures"
     )
-    paper_figures_dir: Path = field(default_factory=lambda: Path("detailed-experimental-results-source") / "detailed-experimental-results-source/")
+    paper_figures_dir: Path = field(
+        default_factory=lambda: Path("detailed-experimental-results-source") / "figures"
+    )
 
     concentrations_list: List[int] = field(default_factory=lambda: [6, 8, 12])
     replicates_list: List[int] = field(default_factory=lambda: [1, 2, 3])

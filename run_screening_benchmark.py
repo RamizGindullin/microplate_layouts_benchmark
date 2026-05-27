@@ -46,9 +46,9 @@ from benchmark_common import (
 validate_layout_registry_consistency()
 
 SCREENING_PANEL_CASES = [
-    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 450),  # mild
-    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  450),  # moderate
-    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  450),  # strong
+    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 1200),  # mild
+    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  1200),  # moderate
+    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  1200),  # strong
 ]
 
 # Each entry: (residuals_file_template, fig_name_suffix).

@@ -93,11 +93,18 @@ class DoseResponseScenario:
     id_text + error_nl determine the CSV filename suffixes written by
     run_simulations and read by the figure-generation stage.
     Figure name suffixes are derived from IC50_DMAX_R2_SCENARIO_GROUPS lambdas.
+
+    NOTE: error_correction lives inside each error_types dict entry here
+    (not on the layout/PlateType), because dose-response normalisation is
+    matched to the disturbance shape. This is the opposite convention from the
+    screening path, where normalisation is per-layout. See benchmark_common.py
+    SCREENING_LAYOUT_SPECS for the screening side.
     """
     id_text: str
     error_nl: float
     error_types: List[Dict[str, Any]]
 
+_DR_CORRECTION = nrm.normalize_plate_nearest_control
 
 @dataclass
 class DoseResponseConfig:
@@ -126,7 +133,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "right-half",
                     "error_function": dt.add_errors_to_right_columns_half,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.2,
                 }]
             ),
@@ -141,7 +148,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "right-half",
                     "error_function": dt.add_errors_to_right_columns_half,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.4,
                 }]
             ),
@@ -151,7 +158,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "bowl-nl",
                     "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.055,
                 }]
             ),
@@ -161,7 +168,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "bowl-nl",
                     "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.055,
                 }]
             ),
@@ -171,7 +178,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "bowl-nl",
                     "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.085,
                 }]
             ),
@@ -181,7 +188,7 @@ class DoseResponseConfig:
                 error_types=[{
                     "type": "bowl-nl",
                     "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": nrm.normalize_plate_nearest_control,
+                    "error_correction": _DR_CORRECTION,
                     "error": 0.085,
                 }]
             ),
@@ -429,7 +436,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     error_type = {
         "type": "right-half",
         "error_function": dt.add_errors_to_right_columns_half,
-        "error_correction": nrm.normalize_plate_nearest_control,
+        "error_correction": _DR_CORRECTION,
         "error": error_nl,
     }
     limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook

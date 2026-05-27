@@ -26,16 +26,20 @@ def fig_dir_str(path: Path) -> str:
 
 
 def _default_error_correction() -> Callable:
-    """Return the default plate-normalisation function.
+    """Return the default plate-normalisation function for screening layouts.
 
-    The import is deferred to this function so that benchmark_common.py does not
-    import libraries.normalization at module load time.  This breaks the circular
-    import chain:
+    All three screening layouts (Random, PLAID, COMPD) currently use
+    normalize_plate_lowess_2d. This is the per-layout correction — it is
+    matched to the spatial structure of the layout, not the disturbance type.
+    (Contrast: dose-response uses normalize_plate_nearest_control, keyed to
+    the disturbance shape, stored in DoseResponseScenario.error_types.)
 
+    To override for a specific layout, set error_correction= on its LayoutSpec
+    entry in SCREENING_LAYOUT_SPECS. To change the global default, change the
+    return value here.
+
+    The import is deferred to avoid a circular import:
         normalization → utilities → benchmark_common → normalization  ✗
-
-    Callers that need the default should use this helper instead of storing the
-    function object directly in the dataclass default.
     """
     import libraries.normalization as nrm  # noqa: PLC0415
     return nrm.normalize_plate_lowess_2d
@@ -139,6 +143,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         plot_order=0,
         control_example_file="plate_layout_rand_10-10_02.npy",
         control_figure_output="detailed-experimental-results-source/figures/plate_random-controls-rows-error.png",
+        # error_correction not set. Uses default: normalize_plate_lowess_2d.
+        # To use a different correction for this layout, set error_correction= here.
     ),
     LayoutSpec(
         key="plaid",
@@ -149,6 +155,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         plot_order=1,
         control_example_file="plate_layout_10-10_01.npy",
         control_figure_output="detailed-experimental-results-source/figures/plate_plaid-controls-rows-error.png",
+        # error_correction not set. Uses default: normalize_plate_lowess_2d.
+        # To use a different correction for this layout, set error_correction= here.
     ),
     LayoutSpec(
         key="compd",
@@ -159,6 +167,8 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         plot_order=2,
         control_example_file="plate_layout_10-10_01.npy",
         control_figure_output="detailed-experimental-results-source/figures/plate_compd-controls-rows-error.png",
+        # error_correction not set. Uses default: normalize_plate_lowess_2d.
+        # To use a different correction for this layout, set error_correction= here.
     ),
 ]
 

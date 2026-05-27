@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Tuple, Callable
 
 import numpy as np
 np.random.seed(42)
@@ -32,7 +32,6 @@ import pandas as pd
 from sklearn import metrics as skmetrics
 
 import libraries.disturbances as dt
-import libraries.normalization as nrm
 import libraries.screening as sc
 import libraries.utilities as util
 from benchmark_common import (
@@ -46,9 +45,9 @@ from benchmark_common import (
 validate_layout_registry_consistency()
 
 SCREENING_PANEL_CASES = [
-    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 1200),  # mild
-    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  1200),  # moderate
-    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  1200),  # strong
+    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 500),  # mild
+    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  500),  # moderate
+    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  500),  # strong
 ]
 
 # Each entry: (residuals_file_template, fig_name_suffix).
@@ -82,7 +81,7 @@ class PlateType:
     display_type: str  # canonical display label ("Random", "PLAID", "COMPD")
     dir: str
     regex: str
-    error_correction: callable
+    error_correction: Callable
 
 
 @dataclass
@@ -121,27 +120,35 @@ class ScreeningConfig:
     pos_stdev: float = 10.0
 
     def plate_types(self, neg_controls: int, pos_controls: int) -> List[PlateType]:
+        """Build PlateType list for the screening simulation.
+
+        Normalisation (error_correction) is per-layout, not per-disturbance.
+        Each layout's correction is resolved from benchmark_common.SCREENING_LAYOUT_SPECS
+        via LayoutSpec._resolved_error_correction() → defaults to normalize_plate_lowess_2d.
+        To use a different correction for a specific layout, set error_correction
+        on that layout's LayoutSpec entry in benchmark_common.py.
+        """
         return [
             PlateType(
                 type=plate_type["type"],
                 display_type=plate_type["display_type"],
                 dir=plate_type["dir"],
                 regex=plate_type["regex"],
-                error_correction=(
-                    plate_type["error_correction"]
-                    if plate_type["error_correction"] is not None
-                    else nrm.normalize_plate_lowess_2d
-                ),
+                error_correction=plate_type["error_correction"],
             )
             for plate_type in screening_plate_types(neg_controls, pos_controls)
         ]
 
-    def error_types(self):
-        return [{
-            "type": "bowl-nl",
-            "error_function": dt.add_bowlshaped_errors_nl,
-            "error_correction": nrm.normalize_plate_nearest_control,
-        }]
+    def error_types(self) -> List[Dict[str, Any]]:
+        """Disturbance types for the screening simulation.
+
+        Normalisation is per-layout, not per-disturbance: each PlateType carries
+        its own error_correction callable (from benchmark_common.SCREENING_LAYOUT_SPECS
+        via _resolved_error_correction). Adding error_correction here would be dead
+        code — the simulation loop calls plate_type.error_correction(...), never
+        et["error_correction"].
+        """
+        return [{"type": "bowl-nl", "error_function": dt.add_bowlshaped_errors_nl}]
 
     id_text: str = "ROC-supplement"
     metrics_id_text: str = "reviewing"
@@ -338,7 +345,7 @@ def simulate_condition(
                             )
                             comp_id_array = np.reshape(remaining_layout, (-1, 1))
                             ideal_plate_array = np.reshape(ideal_plate, (-1, 1))
-                            norm_plate_array = np.reshape(plate, (-1, 1))
+                            norm_plate_array = np.reshape(norm_plate, (-1, 1))
                             activity_array = np.reshape(activity_layout, (-1, 1))
 
                             comp_id_res_df = pd.DataFrame(

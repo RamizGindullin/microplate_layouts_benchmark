@@ -145,6 +145,7 @@ class ScreeningConfig:
 
     id_text: str = "ROC-supplement"
     metrics_id_text: str = "reviewing"
+    metrics_date_tag: str = "20250623"
 
     run_tag: str = "20250623-ROC-supplement"
     batches: int = 10
@@ -529,6 +530,7 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
                 neg_control_mean, pos_control_mean,
                 neg_stdev, pos_stdev,
                 data_directory,
+                run_tag=f"{cfg.metrics_date_tag}-{id_text}",
             )
             output_file_list.append(fname)
             print(f"  error={error:.2f} -> {fname}")

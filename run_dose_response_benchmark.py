@@ -280,10 +280,9 @@ IC50_DMAX_R2_SCENARIO_GROUPS = [
         "right-half-neg-control-log-new-reg",
         RIGHT_HALF_ERROR_LEVELS,
         lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
-        None,
+        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
     ),
 ]
-
 
 # -----------------------------------------------------------------------
 # Stage 2: Figures

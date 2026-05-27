@@ -64,6 +64,7 @@ All mismatches discovered during the Step 3 investigation are now fixed in the s
 |---|---|---|
 | Group 1 `dose_response__paper` — absolute IC50 panel | `figures/dose-response-absic50-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper.png` | ✅ Fixed: `run_dose_response_benchmark.py` now uses `fig_name="-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper"` with `fig_type="absic50"` |
 | Group 1 `dose_response__paper` — d_diff panel | `figures/dose-response-d_diff-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper.png` | ✅ Fixed: `fig_name="d_diff-1-2-3-8doses-dil8-right-half-neg-controls-0.4_paper"` with `fig_type=""` |
+| Group 6 metrics PNGs — date segment in filename | e.g. `screening_metrics_data-10-10-0.01-20250623-reviewing.csv.png` (date pinned to original run) | ✅ Fixed: `ScreeningConfig.metrics_date_tag = "20250623"` added to `run_screening_benchmark.py`; `run_metrics_simulation` now passes `run_tag=f"{cfg.metrics_date_tag}-{id_text}"` to `sc.test_quality_assessment_metrics`. No change to `libraries/screening.py` — the `run_tag` parameter already existed there. |
 
 ---
 
@@ -169,12 +170,32 @@ Grid of MSE plots as bowl-effect strength varies from 0.00 to 0.08 in steps of 0
 All PNGs land in `generated-plots/quality-assessment-metrics/`.
 CSV inputs live in `generated-data/quality-assessment-metrics/`.
 
+### Filename date pinning
+
+The CSV filenames embed a date-tag segment, e.g.:
+
+```
+screening_metrics_data-10-10-0.01-20250623-reviewing.csv
+```
+
+The date segment is controlled by **`ScreeningConfig.metrics_date_tag`** (default `"20250623"`)
+in `run_screening_benchmark.py`. The producing call is:
+
+```python
+sc.test_quality_assessment_metrics(..., run_tag=f"{cfg.metrics_date_tag}-{id_text}")
+```
+
+`libraries/screening.py::test_quality_assessment_metrics` already accepts `run_tag`;
+**no change was needed there**. To regenerate with a new date, update only
+`metrics_date_tag` in `ScreeningConfig`. The PNG filenames mirror the CSV names
+(`screening-SSMD-mse-{csv_name}.png`), so they are pinned automatically.
+
 ### Mapping table
 
 | Group | Figure ID | LaTeX fragment | Image/Table files (repo-root-relative, abbreviated) | Producing script(s) | Notes |
 |---|---|---|---|---|---|
-| 6 | `screening_data_ssmd` | `tikz-figures/screening_data_ssmd.tex` | `generated-plots/quality-assessment-metrics/screening-SSMD-mse-screening_metrics_data-10-10-{0.0…0.08}-{date}-reviewing.csv.png` (9 files) | `run_screening_benchmark.py` → `run_metrics_simulation` + `generate_metrics_plots` | Step 4 candidate for condensed numerical table. |
-| 6 | `screening_data_z_factor` | `tikz-figures/screening_data_z_factor.tex` | `generated-plots/quality-assessment-metrics/screening-Zfactor-mse-screening_metrics_data-10-10-{0.0…0.08}-{date}-reviewing.csv.png` (9 files) | `run_screening_benchmark.py` | Ideal for a joint SSMD + Z′ summary table (Step 4). |
+| 6 | `screening_data_ssmd` | `tikz-figures/screening_data_ssmd.tex` | `generated-plots/quality-assessment-metrics/screening-SSMD-mse-screening_metrics_data-10-10-{0.0…0.08}-20250623-reviewing.csv.png` (9 files) | `run_screening_benchmark.py` → `run_metrics_simulation` + `generate_metrics_plots` | Date segment pinned via `cfg.metrics_date_tag = "20250623"`. Step 4 candidate for condensed numerical table. |
+| 6 | `screening_data_z_factor` | `tikz-figures/screening_data_z_factor.tex` | `generated-plots/quality-assessment-metrics/screening-Zfactor-mse-screening_metrics_data-10-10-{0.0…0.08}-20250623-reviewing.csv.png` (9 files) | `run_screening_benchmark.py` | Same date pinning. Ideal for a joint SSMD + Z′ summary table (Step 4). |
 
 ---
 
@@ -198,7 +219,7 @@ All PNGs land in `generated-plots/screening-supplement/`.
 |---|---|---|
 | 1 | Artifact map | ✅ Done |
 | 2 | Consolidate notebooks → `run_dose_response_benchmark.py` + `run_screening_benchmark.py` | ✅ Done |
-| 3 | Clean unused code; registry-driven layout variables; output-folder routing | ✅ Done (this revision) |
+| 3 | Clean unused code; registry-driven layout variables; output-folder routing | ✅ Done |
 | 4 | Add aggregated LaTeX tables for SSMD/Z′ MSE grids and ROC/PR AUC grids | 🔜 Next |
 | 5 | Expand disturbance coverage (activate unused types, add new ones) | 🔜 Planned |
 

@@ -515,6 +515,7 @@ def generate_screening_figures(cfg: ScreeningConfig) -> None:
 # ---------------------------------------------------------------------------
 
 def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
+    np.random.seed(42)
     ensure_dir(cfg.metrics_data_dir)
 
     output_file_list: List[str] = []

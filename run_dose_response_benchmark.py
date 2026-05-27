@@ -424,6 +424,8 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     The os.chdir() approach from the original script is replaced by passing an
     explicit output_dir to dr.plate_curves_after_error.
     """
+    np.random.seed(42)
+    
     cfg.paper_figures_dir.mkdir(parents=True, exist_ok=True)
 
     slopes = [0.5, 1, 1.5, 2]

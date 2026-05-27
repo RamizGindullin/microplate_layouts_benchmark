@@ -189,7 +189,7 @@ def fit_data(
                     + [("residuals", resids ** 2), ("true_residuals", true_resids ** 2)]
                 )
 
-            except Exception:
+            except Exception as exc:
                 print("Curve fit failed (too many iterations or convergence error)")
                 failed_fits.append({
                     "layout": layout_type,
@@ -307,6 +307,11 @@ def fit_data_min_req(result_data, response_column, result_column):
                 max(group[result_column]),
                 np.median(group.dose),
             ]
+            # fit_data_min_req flips the sign constraint on b (allows negative slopes, which produce inverted sigmoid,
+            # which is biologically meaningless for inhibitors) and removes the floor/ceiling constraints on c and d.
+            # This function is only called from plate_min_curves_after_error, which is not used by the main benchmark scripts today.
+            # The bounds are wrong and will produce nonsense fits if it is ever activated. 
+            # Flag for correction during Step 5 and activate additional disturbance scenarios.
             low_b = [-np.inf, 0, -np.inf, 0]
             up_b = [np.inf, np.inf, np.inf, np.inf]
 
@@ -725,9 +730,9 @@ def full_dose_response_evaluation(
     )
 
     with (
-        open(abs_path, "a") as abs_f,
-        open(rel_path, "a") as rel_f,
-        open(res_path, "a") as res_f,
+        open(abs_path, "w") as abs_f,
+        open(rel_path, "w") as rel_f,
+        open(res_path, "w") as res_f,
     ):
         for current_e in range(e_from, e_to, e_step):
             print(f"\nTesting compounds with e in range {current_e}-{current_e + e_step}:")

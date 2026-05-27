@@ -89,19 +89,21 @@ class PlateType:
 class ScreeningConfig:
     base_dir: Path = field(default_factory=lambda: Path("."))
     layouts_root: Path = field(default_factory=lambda: Path("layouts"))
-    latex_tables_dir: Path = field(default_factory=lambda: Path("latex-tables"))
+    latex_tables_dir: Path = field(
+        default_factory=lambda: Path("detailed-experimental-results-source") / "tables"
+    )
+    screening_plots_dir: Path = field(
+        default_factory=lambda: Path("detailed-experimental-results-source") / "figures"
+    )
+    metrics_plots_dir: Path = field(
+        default_factory=lambda: Path("detailed-experimental-results-source") / "figures"
+    )
 
     screening_data_dir: Path = field(
         default_factory=lambda: Path("generated-data") / "screening"
     )
-    screening_plots_dir: Path = field(
-        default_factory=lambda: Path("generated-plots") / "screening-supplement"
-    )
     metrics_data_dir: Path = field(
         default_factory=lambda: Path("generated-data") / "quality-assessment-metrics"
-    )
-    metrics_plots_dir: Path = field(
-        default_factory=lambda: Path("generated-plots") / "quality-assessment-metrics"
     )
 
     neg_pos_controls_list: List[Tuple[int, int]] = field(
@@ -448,7 +450,7 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
 
 def generate_control_layout_figures(cfg: ScreeningConfig) -> None:
     """Control layout visualisations referenced by tikz-figures/a_figure_controls.tex."""
-    ensure_dir(Path("detailed-experimental-results-source") / "detailed-experimental-results-source/")
+    ensure_dir(Path("detailed-experimental-results-source") / "figures")
 
     neg_control_mean = 90
     pos_control_mean = 60

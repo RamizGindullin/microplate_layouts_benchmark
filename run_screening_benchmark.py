@@ -29,6 +29,7 @@ from typing import Iterable, List, Tuple, Callable
 import numpy as np
 np.random.seed(42)
 import pandas as pd
+from scipy import stats as _scipy_stats
 from sklearn import metrics as skmetrics
 
 import libraries.disturbances as dt
@@ -601,91 +602,193 @@ def run_metrics(cfg: ScreeningConfig) -> None:
 # Stage 4: Auto-generated LaTeX AUC table
 # ---------------------------------------------------------------------------
 
-def generate_auc_latex_table(cfg: ScreeningConfig) -> None:
-    """
-    Generates a LaTeX table with ROC-AUC and PR-AUC values across all hit rates,
-    computed from all batches in the 10-10, error=0.2 screening residuals CSVs.
+def _fmt_mean_std(mean: float, std: float, bold: bool = False) -> str:
+    s = f"{mean:.2f} $\\pm$ ({std:.3f})"
+    return r"\textbf{" + s + r"}" if bold else s
 
-    The table replaces the hardcoded ROC-AUC / PR-AUC table in 0b_figures_tables.tex.
-    Output: cfg.latex_tables_dir / screening_pr_10-10-0.2.tex
-    """
-    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
 
+def _fmt_pvalue_sci(pval: float) -> str:
+    """Format p-value as LaTeX $a\times 10^{b}$."""
+    import re
+    s = f"{pval:.2e}"
+    m = re.match(r"([0-9.]+)e([+-][0-9]+)", s)
+    if m:
+        mantissa = m.group(1).rstrip("0").rstrip(".")
+        exp = int(m.group(2))
+        return f"${mantissa}\\times 10^{{{exp}}}$"
+    return s
+
+
+def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
+    """
+    Returns:
+        {hit_rate: {layout: {"roc": list[float], "pr": list[float]}}}
+    for the 10-10-0.2 scenario across all 6 hit rates.
+    """
     hit_rates  = [1, 5, 10, 20, 30, 40]
     pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
-    layouts    = SCREENING_LAYOUT_ORDER  # derived from registry
+    layouts    = SCREENING_LAYOUT_ORDER
 
-    summary: dict = {}
-
+    result: dict = {}
     for hit_rate, pna in zip(hit_rates, pna_values):
-        csv_name = (
-            f"screening-residuals-10-10-0.2-pna-{pna}{cfg.today_tag}.csv"
-        )
+        csv_name = f"screening-residuals-10-10-0.2-pna-{pna}{cfg.today_tag}.csv"
         csv_path = cfg.screening_data_dir / csv_name
-
+        result[hit_rate] = {lay: {"roc": [], "pr": []} for lay in layouts}
         try:
             df = pd.read_csv(csv_path)
         except FileNotFoundError:
             print(f"  WARNING: {csv_path} not found — skipping hit_rate={hit_rate}%")
-            summary[hit_rate] = {
-                lay: {"roc": (float("nan"), float("nan")),
-                      "pr":  (float("nan"), float("nan"))}
-                for lay in layouts
-            }
             continue
-
         df.columns = df.columns.str.strip()
-
-        summary[hit_rate] = {}
         for layout in layouts:
             sub = df[df["display_type"] == layout]
-            if sub.empty:
-                summary[hit_rate][layout] = {
-                    "roc": (float("nan"), float("nan")),
-                    "pr":  (float("nan"), float("nan")),
-                }
-                continue
-
-            roc_aucs, pr_aucs = [], []
             for _batch_id, grp in sub.groupby("batch"):
                 y_true  = (grp["activity"].astype(float) > 0).astype(int)
                 y_score = -grp["obtained_result"].astype(float)
                 if y_true.nunique() < 2:
                     continue
-                roc_aucs.append(skmetrics.roc_auc_score(y_true, y_score))
-                pr_aucs.append(skmetrics.average_precision_score(y_true, y_score))
+                result[hit_rate][layout]["roc"].append(
+                    skmetrics.roc_auc_score(y_true, y_score)
+                )
+                result[hit_rate][layout]["pr"].append(
+                    skmetrics.average_precision_score(y_true, y_score)
+                )
+    return result
 
-            summary[hit_rate][layout] = {
-                "roc": (np.mean(roc_aucs), np.std(roc_aucs))
-                       if roc_aucs else (float("nan"), float("nan")),
-                "pr":  (np.mean(pr_aucs),  np.std(pr_aucs))
-                       if pr_aucs  else (float("nan"), float("nan")),
-            }
 
-    col_labels = (
-        [f"{lay} ROC" for lay in layouts]
-        + [f"{lay} PR"  for lay in layouts]
-    )
+def _auc_summary(per_batch: dict, metric: str) -> dict:
+    """
+    From per_batch {hit_rate: {layout: {metric: list}}},
+    return {hit_rate: {layout: (mean, std)}}.
+    """
+    summary = {}
+    for hr, layout_dict in per_batch.items():
+        summary[hr] = {}
+        for lay, metrics in layout_dict.items():
+            vals = metrics[metric]
+            summary[hr][lay] = (
+                (float("nan"), float("nan"))
+                if not vals
+                else (float(np.mean(vals)), float(np.std(vals)))
+            )
+    return summary
+
+
+def _write_auc_table(summary: dict, hit_rates: list, layouts: list, path: Path) -> None:
+    """Write tabular body only (no table env) with bold-best per column."""
+    col_spec = "r" + "c" * len(hit_rates)
     lines = [
-        r"\begin{tabular}{r" + "c" * 6 + r"}",
+        rf"\begin{{tabular}}{{{col_spec}}}",
         r"\toprule",
-        r"Hit rate & " + " & ".join(col_labels) + r" \\",
+        r"Hit-Rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
         r"\midrule",
     ]
-    for hit_rate in hit_rates:
-        row = [f"{hit_rate}\\%"]
-        for metric in ("roc", "pr"):
-            for layout in layouts:
-                mean, std = summary.get(hit_rate, {}).get(
-                    layout, {}
-                ).get(metric, (float("nan"), float("nan")))
-                row.append("--" if np.isnan(mean) else f"{mean:.3f} $\\pm$ {std:.3f}")
+    for lay in layouts:
+        row = [lay]
+        for hr in hit_rates:
+            means = [summary[hr][l][0] for l in layouts]
+            best  = max(m for m in means if not np.isnan(m)) if any(not np.isnan(m) for m in means) else float("nan")
+            mean, std = summary[hr][lay]
+            if np.isnan(mean):
+                row.append("--")
+            else:
+                row.append(_fmt_mean_std(mean, std, bold=(mean == best)))
         lines.append(" & ".join(row) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}"]
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
 
-    out_path = cfg.latex_tables_dir / "screening_pr_10-10-0.2.tex"
-    out_path.write_text("\n".join(lines))
-    print(f"  Written: {out_path}")
+
+def _write_pvalue_table(per_batch: dict, metric: str, hit_rates: list, path: Path) -> None:
+    """
+    Welch t-test between per-batch AUC vectors for each layout pair.
+    Layout pairs in supplement order: PLAID-Random, Random-COMPD, PLAID-COMPD.
+    """
+    # Supplement uses this fixed pair order
+    pairs = [("PLAID", "Random"), ("Random", "COMPD"), ("PLAID", "COMPD")]
+    col_spec = "r" + "c" * len(hit_rates)
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        r"Hit rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
+        r"\midrule",
+    ]
+    for lay_a, lay_b in pairs:
+        row = [f"{lay_a} -- {lay_b}"]
+        for hr in hit_rates:
+            a_vals = per_batch[hr][lay_a][metric]
+            b_vals = per_batch[hr][lay_b][metric]
+            if len(a_vals) < 2 or len(b_vals) < 2:
+                row.append("--")
+            else:
+                _, pval = _scipy_stats.ttest_ind(a_vals, b_vals, equal_var=False)
+                row.append(_fmt_pvalue_sci(pval))
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+def _write_combined_roc_pr_table(
+    roc_summary: dict, pr_summary: dict, hit_rates: list, layouts: list, path: Path
+) -> None:
+    """
+    Two-section (ROC-AUC / PR-AUC) table for 0b_figures_tables.tex.
+    Bold marks the best entry per column per metric block.
+    """
+    n_hr  = len(hit_rates)
+    col_spec = "r" + "c" * n_hr
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        r"Hit-Rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
+        r"\midrule",
+        rf"\multicolumn{{{n_hr + 1}}}{{l}}{{\textit{{ROC-AUC}}}} \\",
+    ]
+    for data_block in (roc_summary, pr_summary):
+        for lay in layouts:
+            row = [lay]
+            for hr in hit_rates:
+                means = [data_block[hr][l][0] for l in layouts]
+                best  = max(m for m in means if not np.isnan(m)) if any(not np.isnan(m) for m in means) else float("nan")
+                mean, std = data_block[hr][lay]
+                if np.isnan(mean):
+                    row.append("--")
+                else:
+                    row.append(_fmt_mean_std(mean, std, bold=(mean == best)))
+            lines.append(" & ".join(row) + r" \\")
+        if data_block is roc_summary:
+            lines += [r"\midrule", rf"\multicolumn{{{n_hr + 1}}}{{l}}{{\textit{{PR-AUC}}}} \\"]
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
+    """
+    Generate all 5 LaTeX table fragments for the screening 10-10-0.2 scenario.
+
+    Output files written to cfg.latex_tables_dir:
+      screening-roc-auc-10-10-0.2.tex      (b_table_stats Table 2)
+      screening-roc-pvalues-10-10-0.2.tex  (b_table_stats Table 3)
+      screening-pr-auc-10-10-0.2.tex       (b_table_stats Table 4)
+      screening-pr-pvalues-10-10-0.2.tex   (b_table_stats Table 5)
+      screening_pr_10-10-0.2.tex           (0b_figures_tables combined)
+    """
+    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
+    d  = cfg.latex_tables_dir
+    hr = [1, 5, 10, 20, 30, 40]
+    ly = SCREENING_LAYOUT_ORDER
+
+    per_batch  = _collect_per_batch_aucs(cfg)
+    roc_summ   = _auc_summary(per_batch, "roc")
+    pr_summ    = _auc_summary(per_batch, "pr")
+
+    _write_auc_table(roc_summ, hr, ly, d / "screening-roc-auc-10-10-0.2.tex")
+    _write_auc_table(pr_summ,  hr, ly, d / "screening-pr-auc-10-10-0.2.tex")
+    _write_pvalue_table(per_batch, "roc", hr, d / "screening-roc-pvalues-10-10-0.2.tex")
+    _write_pvalue_table(per_batch, "pr",  hr, d / "screening-pr-pvalues-10-10-0.2.tex")
+    _write_combined_roc_pr_table(roc_summ, pr_summ, hr, ly, d / "screening_pr_10-10-0.2.tex")
 
 
 # ---------------------------------------------------------------------------
@@ -722,7 +825,7 @@ def main() -> None:
     if args.stage in ("metrics", "all"):
         run_metrics(cfg)
     if args.stage in ("tables", "all"):
-        generate_auc_latex_table(cfg)
+        generate_auc_latex_tables(cfg)
 
 
 if __name__ == "__main__":

@@ -424,7 +424,6 @@ def plot_barplot_replicate_data(
     if pvalue_thresholds is None:
         pvalue_thresholds = [[1e-43, "***"], [1e-12, "**"], [1e-4, "*"], [1, "ns"]]
 
-    palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     hue_order = DOSE_RESPONSE_LAYOUT_ORDER
 
     # Build string-keyed box_pairs to match string replicates
@@ -440,6 +439,7 @@ def plot_barplot_replicate_data(
         plot_col = "MSE"
         plot_data = results_df[results_df["MSE"] != np.inf]
         ylabel = "Mean absolute log10 difference"
+        palette = sns.color_palette("Greens",len(str_order))
     elif fig_type == "absic50":
         for col in ("e", "fit_e"):
             results_df[col] = pd.to_numeric(results_df[col], errors="coerce")
@@ -447,10 +447,12 @@ def plot_barplot_replicate_data(
         plot_col = "abs_e_diff"
         plot_data = results_df.dropna(subset=["abs_e_diff"])
         ylabel = "Mean absolute IC50 difference"
+        palette = sns.color_palette("Oranges",len(str_order))
     else:
         plot_col = "diff_d"
         plot_data = results_df
         ylabel = "Mean absolute d difference"
+        palette = sns.color_palette("Greens",len(str_order))
 
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(4, 3))

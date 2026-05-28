@@ -419,6 +419,7 @@ def plot_barplot_replicate_data(
 
     # Cast replicates to str so seaborn tick labels and Annotator order agree
     results_df["replicates"] = results_df["replicates"].astype(str)
+    results_df = results_df.rename(columns={"replicates": "Replicates", "layout": "Layout"})
     str_order = ["1", "2", "3"]
 
     if pvalue_thresholds is None:
@@ -460,9 +461,9 @@ def plot_barplot_replicate_data(
         ax.set_ylim(top=y_max)
 
     sns.barplot(
-        x="replicates", y=plot_col,
+        x="Replicates", y=plot_col,
         data=plot_data,
-        hue="layout", hue_order=hue_order,
+        hue="Layout", hue_order=hue_order,
         order=str_order,
         palette=palette, ax=ax,
     )
@@ -470,12 +471,13 @@ def plot_barplot_replicate_data(
 
     annotator = Annotator(
         ax, pairs=box_pairs, data=plot_data,
-        x="replicates", y=plot_col,
-        hue="layout", order=str_order, hue_order=hue_order,
+        x="Replicates", y=plot_col,
+        hue="Layout", order=str_order, hue_order=hue_order,
     )
     annotator.configure(
         test="t-test_ind", text_format="star",
-        loc="inside", pvalue_thresholds=pvalue_thresholds, text_offset=-1,
+        loc="inside", pvalue_thresholds=pvalue_thresholds,
+        text_offset=-1, fontsize=6
     )
     annotator.apply_and_annotate()
 
@@ -848,6 +850,7 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
         mse_df.insert(0, 'layout', layout_name)
         frames.append(mse_df)
     results_df = pd.concat(frames, ignore_index=True)
+    results_df = results_df.rename(columns={"layout": "Layouts"})
     
     sns.set_theme(style="whitegrid")
 
@@ -861,11 +864,11 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
     if y_max:
         ax.set_ylim(top = y_max)
 
-    ax = sns.barplot(x='layout', y="MSE", data=results_df, hue="layout", palette=palette, order=order, legend=False)
+    ax = sns.barplot(x='Layouts', y="MSE", data=results_df, hue="Layouts", palette=palette, order=order, legend=False)
     plt.tick_params(axis='both', which='major', labelsize=10)
     plt.ylabel("MSE", fontsize = 10)
 
-    annotator = Annotator(ax, pairs=box_pairs, data=results_df, x='layout', y="MSE", order=order)
+    annotator = Annotator(ax, pairs=box_pairs, data=results_df, x='Layouts', y="MSE", order=order)
     annotator.configure(test='t-test_ind', text_format='star', loc='inside', text_offset=-1)
     annotator.apply_and_annotate()
 

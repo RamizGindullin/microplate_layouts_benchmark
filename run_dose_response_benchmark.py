@@ -634,6 +634,7 @@ def main() -> None:
             "tables:   generate LaTeX tables; "
             "curves:   generate example curve PNGs; "
             "all:      from simulate to figures to tables to curves"
+        ),
     )
     args = parser.parse_args()
     cfg = DoseResponseConfig()

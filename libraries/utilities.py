@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import os
 import re
+from pathlib import Path
 from statannotations.Annotator import Annotator # to add p-values to plots
 from scipy import stats
 from random import randrange
@@ -156,6 +157,509 @@ def _prepare_dose_response_residuals_frame(residuals_1rep, residuals_2rep, resid
     return _stack_replicate_residuals_frames(
         [residuals_1rep, residuals_2rep, residuals_3rep]
     )
+
+
+def prepare_dose_response_df(data_1rep, data_2rep, data_3rep):
+    """Stack three replicate result arrays into a clean long-form DataFrame.
+
+    Returns a DataFrame with all numeric columns coerced, inf to NaN cleaned,
+    failed fits (NaN MSE) dropped, and the following derived columns added:
+
+        diff_d      abs(d - fit_d)   — max-effect accuracy
+        abs_e_diff  abs(e - fit_e)   — baseline accuracy
+
+    Columns: replicates, layout, MSE, Error, E, r2_score, b, c, d, e,
+             fit_b, fit_c, fit_d, fit_e, diff_d, abs_e_diff, ...
+    """
+    df = _stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
+    for col in ("MSE", "E", "r2_score", "b", "c", "d", "e",
+                "fit_b", "fit_c", "fit_d", "fit_e"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.dropna(subset=["MSE"])
+    df["diff_d"] = (df["d"] - df["fit_d"]).abs()
+    df["abs_e_diff"] = (df["e"] - df["fit_e"]).abs()
+    return df
+
+
+def prepare_screening_metrics_df(csv_path, scenario_label, metric_col="Zfactor_norm"):
+    """Load a screening quality-metrics CSV and return a tidy long-form DataFrame.
+
+    Parameters
+    ----------
+    csv_path : str or Path
+        Path to a screening_scores_data-*.csv produced by run_screening_benchmark.py.
+    scenario_label : str
+        Human-readable label for this scenario (e.g. "Mild bowl", "10-10-0.06").
+        Stored in the ``scenario`` column so multiple scenarios can be concatenated.
+    metric_col : str
+        Column name to extract (e.g. "Zfactor_norm", "SSMD_norm").
+
+    Returns
+    -------
+    DataFrame with columns: scenario, layout, <metric_col>
+    """
+    df = pd.read_csv(csv_path)
+    df.columns = df.columns.str.strip()
+    df[metric_col] = pd.to_numeric(df[metric_col], errors="coerce")
+    df = df.replace([np.inf, -np.inf], np.nan)
+    df = df.rename(columns={"display_type": "layout"})
+    df["scenario"] = scenario_label
+    return df[["scenario", "layout", metric_col]].rename(columns={metric_col: "value"})
+
+
+# ---------------------------------------------------------------------------
+# LaTeX cell formatters
+# ---------------------------------------------------------------------------
+
+def fmt_mean_std(mean: float, std: float, bold: bool = False) -> str:
+    """Format ``mean +/- (std)`` as a LaTeX cell string, optionally bolded."""
+    s = f"{mean:.2f} $\\pm$ ({std:.3f})"
+    return r"\textbf{" + s + r"}" if bold else s
+
+
+def fmt_pvalue_sci(pval: float) -> str:
+    """Format a p-value as LaTeX ``$a\\times 10^{b}$``."""
+    s = f"{pval:.2e}"
+    m = re.match(r"([0-9.]+)e([+-][0-9]+)", s)
+    if m:
+        mantissa = m.group(1).rstrip("0").rstrip(".")
+        exp = int(m.group(2))
+        return f"${mantissa}\\times 10^{{{exp}}}$"
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Generic LaTeX table writers
+# ---------------------------------------------------------------------------
+
+def write_latex_mean_std_table(
+    df,
+    group_col,
+    value_col,
+    group_values,
+    layouts,
+    path,
+    group_label="",
+    bold_min=False,
+):
+    """Write a mean±std tabular fragment to *path*.
+
+    The table has one row per layout and one column per group value (e.g. one
+    column per replicate count, or one column per scenario label).  The best
+    cell in each column is **bolded**: minimum when ``bold_min=True`` (error
+    metrics), maximum otherwise (AUC, quality metrics).
+
+    Parameters
+    ----------
+    df : DataFrame
+        Long-form data with at least columns ``[group_col, "layout", value_col]``.
+    group_col : str
+        Column used for columns (e.g. ``"replicates"`` or ``"scenario"``).
+    value_col : str
+        Numeric column to summarise.
+    group_values : list
+        Ordered column values to include (e.g. ``[1, 2, 3]`` or
+        ``["Mild bowl", "Strong bowl", "Column"]``).
+    layouts : list[str]
+        Ordered layout display names (row order).
+    path : Path or str
+        Output ``.tex`` file path.
+    group_label : str
+        Header for the leftmost (row-label) column.
+    bold_min : bool
+        Bold the minimum per column when True; bold the maximum when False.
+    """
+    path = Path(path)
+    col_spec = "r" + "c" * len(group_values)
+    header_cells = [str(g) for g in group_values]
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        (group_label or "Layout") + " & " + " & ".join(header_cells) + r" \\",
+        r"\midrule",
+    ]
+    for lay in layouts:
+        row = [lay]
+        for gv in group_values:
+            vals = df.loc[
+                (df[group_col] == gv) & (df["layout"] == lay), value_col
+            ].dropna()
+            if vals.empty:
+                row.append("--")
+                continue
+            mean = float(vals.mean())
+            std  = float(vals.std())
+            # Determine best across all layouts for this group value
+            all_means = []
+            for other_lay in layouts:
+                other_vals = df.loc[
+                    (df[group_col] == gv) & (df["layout"] == other_lay), value_col
+                ].dropna()
+                if not other_vals.empty:
+                    all_means.append(float(other_vals.mean()))
+            best = (min(all_means) if bold_min else max(all_means)) if all_means else float("nan")
+            row.append(fmt_mean_std(mean, std, bold=(mean == best)))
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+def write_latex_pvalue_table(
+    df,
+    group_col,
+    value_col,
+    group_values,
+    layout_pairs,
+    path,
+    group_label="",
+):
+    """Write a Welch t-test p-value tabular fragment to *path*.
+
+    One row per layout pair, one column per group value.
+
+    Parameters
+    ----------
+    df : DataFrame
+        Long-form data with columns ``[group_col, "layout", value_col]``.
+    group_col : str
+        Column used for columns (e.g. ``"replicates"`` or ``"scenario"``).
+    value_col : str
+        Numeric column to test.
+    group_values : list
+        Ordered column values (e.g. ``[1, 2, 3]`` or scenario labels).
+    layout_pairs : list[tuple[str, str]]
+        Ordered pairs of (layout_a, layout_b) to compare.
+    path : Path or str
+        Output ``.tex`` file path.
+    group_label : str
+        Header for the leftmost column.
+    """
+    path = Path(path)
+    col_spec = "r" + "c" * len(group_values)
+    header_cells = [str(g) for g in group_values]
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        (group_label or "Comparison") + " & " + " & ".join(header_cells) + r" \\",
+        r"\midrule",
+    ]
+    for lay_a, lay_b in layout_pairs:
+        row = [f"{lay_a} -- {lay_b}"]
+        for gv in group_values:
+            a_vals = df.loc[
+                (df[group_col] == gv) & (df["layout"] == lay_a), value_col
+            ].dropna().values
+            b_vals = df.loc[
+                (df[group_col] == gv) & (df["layout"] == lay_b), value_col
+            ].dropna().values
+            if len(a_vals) < 2 or len(b_vals) < 2:
+                row.append("--")
+            else:
+                _, pval = stats.ttest_ind(a_vals, b_vals, equal_var=False)
+                row.append(fmt_pvalue_sci(pval))
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+# ---------------------------------------------------------------------------
+# AUC-specific LaTeX table writers  (screening ROC / PR)
+# ---------------------------------------------------------------------------
+
+def write_latex_auc_table(summary, hit_rates, layouts, path):
+    """Write a ROC-AUC or PR-AUC mean±std tabular fragment.
+
+    *summary* has the shape ``{hit_rate: {layout: (mean, std)}}``.
+    Bold marks the best (highest) mean per hit-rate column.
+
+    This writer is AUC-specific because its column header uses ``hit_rate%``
+    notation and its grouping key is an integer hit-rate rather than a
+    generic group label.
+    """
+    path = Path(path)
+    col_spec = "r" + "c" * len(hit_rates)
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        r"Hit-Rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
+        r"\midrule",
+    ]
+    for lay in layouts:
+        row = [lay]
+        for hr in hit_rates:
+            means = [summary[hr][l][0] for l in layouts]
+            best  = max(m for m in means if not np.isnan(m)) if any(not np.isnan(m) for m in means) else float("nan")
+            mean, std = summary[hr][lay]
+            if np.isnan(mean):
+                row.append("--")
+            else:
+                row.append(fmt_mean_std(mean, std, bold=(mean == best)))
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+def write_latex_auc_pvalue_table(per_batch, metric, hit_rates, path,
+                                  layout_pairs=None):
+    """Write a Welch t-test p-value table for per-batch AUC vectors.
+
+    *per_batch* has the shape
+    ``{hit_rate: {layout: {"roc": list[float], "pr": list[float]}}}``.
+
+    Parameters
+    ----------
+    layout_pairs : list[tuple] or None
+        Explicit pair order.  Defaults to the supplement canonical order
+        ``[(PLAID, Random), (Random, COMPD), (PLAID, COMPD)]``.
+    """
+    from scipy import stats as _st
+    if layout_pairs is None:
+        layout_pairs = [("PLAID", "Random"), ("Random", "COMPD"), ("PLAID", "COMPD")]
+    path = Path(path)
+    col_spec = "r" + "c" * len(hit_rates)
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        r"Hit rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
+        r"\midrule",
+    ]
+    for lay_a, lay_b in layout_pairs:
+        row = [f"{lay_a} -- {lay_b}"]
+        for hr in hit_rates:
+            a_vals = per_batch[hr][lay_a][metric]
+            b_vals = per_batch[hr][lay_b][metric]
+            if len(a_vals) < 2 or len(b_vals) < 2:
+                row.append("--")
+            else:
+                _, pval = _st.ttest_ind(a_vals, b_vals, equal_var=False)
+                row.append(fmt_pvalue_sci(pval))
+        lines.append(" & ".join(row) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+def write_latex_combined_roc_pr_table(roc_summary, pr_summary, hit_rates,
+                                       layouts, path):
+    """Write the two-section ROC-AUC / PR-AUC table for 0b_figures_tables.tex.
+
+    Bold marks the best entry per column per metric block.
+    """
+    path = Path(path)
+    n_hr = len(hit_rates)
+    col_spec = "r" + "c" * n_hr
+    lines = [
+        rf"\begin{{tabular}}{{{col_spec}}}",
+        r"\toprule",
+        r"Hit-Rate & " + " & ".join(f"{h}\\%" for h in hit_rates) + r" \\",
+        r"\midrule",
+        rf"\multicolumn{{{n_hr + 1}}}{{l}}{{\textit{{ROC-AUC}}}} \\",
+    ]
+    for data_block in (roc_summary, pr_summary):
+        for lay in layouts:
+            row = [lay]
+            for hr in hit_rates:
+                means = [data_block[hr][l][0] for l in layouts]
+                best  = max(m for m in means if not np.isnan(m)) if any(not np.isnan(m) for m in means) else float("nan")
+                mean, std = data_block[hr][lay]
+                if np.isnan(mean):
+                    row.append("--")
+                else:
+                    row.append(fmt_mean_std(mean, std, bold=(mean == best)))
+            lines.append(" & ".join(row) + r" \\")
+        if data_block is roc_summary:
+            lines += [r"\midrule", rf"\multicolumn{{{n_hr + 1}}}{{l}}{{\textit{{PR-AUC}}}} \\"]
+    lines += [r"\bottomrule", r"\end{tabular}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
+# ---------------------------------------------------------------------------
+# TODO(superseded): create_latex_table_wide and create_latex_table_pvalues_wide
+# are superseded by write_latex_mean_std_table and write_latex_pvalue_table.
+# They are retained here only because run_dose_response_benchmark.py currently
+# calls them directly.  Once that script is updated to use the new API, these
+# functions can be removed.
+# ---------------------------------------------------------------------------
+
+def create_latex_table_wide(
+    data_1rep,
+    data_2rep,
+    data_3rep,
+    tex_filename,
+    table_text="Relative \\ECIC",
+    column_name="MSE",
+):
+    """LaTeX table of per-layout, per-replicate summary stats (mean ± std).
+
+    .. deprecated::
+        Superseded by :func:`write_latex_mean_std_table`.  Kept for backward
+        compatibility until ``run_dose_response_benchmark.py`` is updated.
+    """
+    latex_f = open(tex_filename, "w")
+
+    results_df = _stack_replicate_results_frames(
+        [data_1rep, data_2rep, data_3rep]
+    )
+
+    results_df[column_name] = pd.to_numeric(
+        results_df[column_name], errors="coerce"
+    )
+    results_df = results_df.replace([np.inf, -np.inf], np.nan)
+    results_df = results_df.dropna(subset=[column_name])
+
+    layouts = [
+        spec.display_type
+        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+    ]
+
+    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
+    for layout in layouts:
+        latex_f.write(" & " + layout)
+    latex_f.write(r"\\ " + "\n")
+
+    for rep in (1, 2, 3):
+        latex_f.write(f"Rep {rep}")
+        for layout in layouts:
+            sub = results_df[
+                (results_df["layout"] == layout)
+                & (results_df["replicates"] == rep)
+            ][column_name]
+
+            if sub.empty:
+                cell = "--"
+            else:
+                mean = sub.mean()
+                std = sub.std()
+                cell = f"{mean:.2f} $\\pm$ ({std:.2f})"
+
+            latex_f.write(" & " + cell)
+        latex_f.write(r"\\ " + "\n")
+
+    latex_f.write(r"\hline" + "\n")
+    latex_f.close()
+
+
+def create_latex_table_pvalues_wide(
+    data_1rep,
+    data_2rep,
+    data_3rep,
+    tex_filename,
+    table_text="Relative \\ECIC",
+    column_name="MSE",
+):
+    """LaTeX table of per-replicate pairwise p-values between layouts.
+
+    .. deprecated::
+        Superseded by :func:`write_latex_pvalue_table`.  Kept for backward
+        compatibility until ``run_dose_response_benchmark.py`` is updated.
+    """
+    latex_f = open(tex_filename, "w")
+
+    results_df = _stack_replicate_results_frames(
+        [data_1rep, data_2rep, data_3rep]
+    )
+
+    results_df[column_name] = pd.to_numeric(
+        results_df[column_name], errors="coerce"
+    )
+    results_df = results_df.replace([np.inf, -np.inf], np.nan)
+    results_df = results_df.dropna(subset=[column_name])
+
+    layouts = [
+        spec.display_type
+        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+    ]
+
+    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
+
+    for i, layout_1 in enumerate(layouts):
+        for layout_2 in layouts[i + 1 :]:
+            latex_f.write(" & " + layout_1 + " -- " + layout_2)
+
+            for rep in (1, 2, 3):
+                arr1 = results_df.loc[
+                    (results_df["layout"] == layout_1)
+                    & (results_df["replicates"] == rep),
+                    column_name,
+                ]
+                arr2 = results_df.loc[
+                    (results_df["layout"] == layout_2)
+                    & (results_df["replicates"] == rep),
+                    column_name,
+                ]
+
+                if arr1.empty or arr2.empty:
+                    cell = "--"
+                else:
+                    _, pvalue = stats.ttest_ind(
+                        arr1, arr2, equal_var=False
+                    )
+                    cell = f"{pvalue:.2e}"
+
+                latex_f.write(" & " + cell)
+
+            latex_f.write(r"\\ " + "\n")
+
+    latex_f.write(r"\hline" + "\n")
+    latex_f.close()
+
+
+# ---------------------------------------------------------------------------
+# TODO(dead-code): create_latex_table is not called by any benchmark script.
+# Retained as a reference until the new write_latex_mean_std_table API is
+# confirmed stable; safe to delete in a subsequent cleanup pass.
+# ---------------------------------------------------------------------------
+
+def create_latex_table(data, tex_filename, column_name="MSE"):
+    # Open file
+    latex_f=open(tex_filename,'w')
+
+    results_df = pd.DataFrame(data, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
+    results_df['MSE'] = pd.to_numeric(results_df['MSE'], errors='coerce')
+    results_df = results_df.sort_values("MSE")
+    results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
+
+    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
+
+    results_df.d = pd.to_numeric(results_df.d, errors='coerce')
+    results_df.fit_d = pd.to_numeric(results_df.fit_d, errors='coerce')
+
+    results_df.insert(0, 'diff_d', 0)
+    results_df.diff_d = abs(results_df.d - results_df.fit_d)    
+
+    random_description = results_df[results_df['layout']=='Random'].describe()
+    plaid_description = results_df[results_df['layout']=='PLAID'].describe()
+    border_description = results_df[results_df['layout']=='COMPD'].describe()
+
+    latex_f.write(" & Random & PLAID & COMPD \\\\ ")
+    latex_f.write("\n\\hline\n")
+
+    rows = [{'row_id':'count', 'row_name':'\\tabCount{}'},
+            {'row_id':'mean',  'row_name':'\\tabMean{}'},
+            {'row_id':'std',   'row_name':'\\tabSTD{}'},
+            {'row_id':'min',   'row_name':'\\tabMin{}'},
+            {'row_id':'25%',   'row_name':'\\tabQone{}'},
+            {'row_id':'50%',   'row_name':'\\tabMedian{}'},
+            {'row_id':'75%',   'row_name':'\\tabQthree{}'},
+            {'row_id':'max',   'row_name':'\\tabMax{}'}]
+
+    for row in rows:
+        latex_f.write(row['row_name']+" & "+str(round(random_description.loc[row['row_id'],column_name],2))+" & "+str(round(plaid_description.loc[row['row_id'],column_name],2))+" & "+str(round(border_description.loc[row['row_id'],column_name],2))+"\\\\ \n")
+
+    latex_f.write("\\hline")
+
+    # Close file
+    latex_f.close()
 
 
 def plot_plate(plate_array, title="", mask=None, filename=None, vmin=None, vmax=None):
@@ -591,50 +1095,6 @@ def plot_r2_percentage(
     plt.close(fig)
 
 
-# TODO(dead-code): create_latex_table is superseded by create_latex_table_wide.
-# Not called by any benchmark script.
-def create_latex_table(data, tex_filename, column_name="MSE"):
-    # Open file
-    latex_f=open(tex_filename,'w')
-    
-    results_df = pd.DataFrame(data, columns=["layout", "compound", "MSE", "error type", "Error", "E", "rows lost", "r2_score", "b", "c", "d", "e", "fit_b", "fit_c", "fit_d", "fit_e"])
-    results_df['MSE'] = pd.to_numeric(results_df['MSE'], errors='coerce')
-    results_df = results_df.sort_values("MSE")
-    results_df = results_df[np.logical_not(np.isnan(results_df['MSE']))]
-
-    results_df['layout'] = _classify_dose_response_layout_series(results_df['layout'])
-
-    results_df.d = pd.to_numeric(results_df.d, errors='coerce')
-    results_df.fit_d = pd.to_numeric(results_df.fit_d, errors='coerce')
-
-    results_df.insert(0, 'diff_d', 0)
-    results_df.diff_d = abs(results_df.d - results_df.fit_d)    
-    
-    random_description = results_df[results_df['layout']=='Random'].describe()
-    plaid_description = results_df[results_df['layout']=='PLAID'].describe()
-    border_description = results_df[results_df['layout']=='COMPD'].describe()
-
-    latex_f.write(" & Random & PLAID & COMPD \\\\ ")
-    latex_f.write("\n\\hline\n")
-    
-    rows = [{'row_id':'count', 'row_name':'\\tabCount{}'},
-            {'row_id':'mean',  'row_name':'\\tabMean{}'},
-            {'row_id':'std',   'row_name':'\\tabSTD{}'},
-            {'row_id':'min',   'row_name':'\\tabMin{}'},
-            {'row_id':'25%',   'row_name':'\\tabQone{}'},
-            {'row_id':'50%',   'row_name':'\\tabMedian{}'},
-            {'row_id':'75%',   'row_name':'\\tabQthree{}'},
-            {'row_id':'max',   'row_name':'\\tabMax{}'}]
-    
-    for row in rows:
-        latex_f.write(row['row_name']+" & "+str(round(random_description.loc[row['row_id'],column_name],2))+" & "+str(round(plaid_description.loc[row['row_id'],column_name],2))+" & "+str(round(border_description.loc[row['row_id'],column_name],2))+"\\\\ \n")
-    
-    latex_f.write("\\hline")
-        
-    # Close file
-    latex_f.close()
-    
-    
 def create_latex_table_wide(
     data_1rep,
     data_2rep,

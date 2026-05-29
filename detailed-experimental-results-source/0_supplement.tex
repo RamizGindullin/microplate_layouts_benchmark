@@ -42,9 +42,68 @@ Figures~\ref{fig:dose_response_paper}  and Figures~\ref{fig:dose-response-curves
 
 Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild}--\ref{fig:screening-ssmd-collection-10-10-stdev-3} showcase various results of screening experiments.
 
+\bibliographystyle{plain}
+\bibliography{compd_bibliography}
+
+\clearpage
 
 \input{tikz-figures/dose_response__paper}
 \input{tikz-figures/screening_data__paper}
+
+\clearpage
+
+\subsection*{Dose-response experiments}
+
+% Residuals / goodness-of-fit subsection:
+\begin{table}[!h]
+  \caption{Residual MSE overview across all dose-response scenarios.}
+  \label{tab:dr-residuals-overview}
+  \centering
+  \input{tables/dr-overview-residuals}
+\end{table}
+
+% Relative IC50/EC50 subsection:
+\begin{table}[!h]
+  \caption{Relative IC50/EC50 MSE overview across all dose-response scenarios.}
+  \label{tab:dr-relic50-overview}
+  \centering
+  \input{tables/dr-overview-rel-ic50}
+\end{table}
+
+% Absolute IC50/EC50 subsection:
+\begin{table}[!h]
+  \caption{Absolute IC50/EC50 MSE overview across all dose-response scenarios.}
+  \label{tab:dr-absic50-overview}
+  \centering
+  \input{tables/dr-overview-abs-ic50}
+\end{table}
+
+\subsection*{ROC and PR AUC -- overview across all configurations}
+
+Table~\ref{tab:screening-roc-overview} and~\ref{tab:screening-pr-overview}
+summarise ROC-AUC and PR-AUC across all control configurations (8--8, 10--10,
+20--10) and bowl-effect strengths.  Superscripts $^{*}$/$^{**}$/$^{***}$
+indicate COMPD\,vs.\,PLAID Welch $t$-test significance at $p<0.05/0.01/0.001$.
+
+\begin{table}[!h]
+  \caption{ROC-AUC overview: mean$\pm$std across all screening configurations.}
+  \label{tab:screening-roc-overview}
+  \centering
+  \input{tables/screening-overview-roc}
+\end{table}
+
+\begin{table}[!h]
+  \caption{PR-AUC overview: mean$\pm$std across all screening configurations.}
+  \label{tab:screening-pr-overview}
+  \centering
+  \input{tables/screening-overview-pr}
+\end{table}
+
+\clearpage
+
+\iffalse
+
+
 
 \input{b_table_stats}
 
@@ -82,8 +141,7 @@ Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild
 \input{tikz-figures/screening_data_z_factor}
 \input{tikz-figures/screening_data_ssmd}
 
-\bibliographystyle{plain}
-\bibliography{compd_bibliography}
+\fi 
 
 
 \end{document}

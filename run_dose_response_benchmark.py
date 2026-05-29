@@ -36,6 +36,7 @@ import libraries.utilities as util
 from benchmark_common import (
     BOWL_ERROR_LEVELS,
     DOSE_RESPONSE_FIGURE_CASES,
+    DOSE_RESPONSE_LAYOUT_SPECS,
     RIGHT_HALF_ERROR_LEVELS,
     dose_response_curve_examples,
     dose_response_plate_types,
@@ -441,6 +442,127 @@ def generate_ic50_latex_tables(cfg: DoseResponseConfig) -> None:
     )
 
 
+
+def _write_dr_table_pair(
+    data_1rep: "np.ndarray",
+    data_2rep: "np.ndarray",
+    data_3rep: "np.ndarray",
+    stem: str,
+    latex_tables_dir: "Path",
+    prefix: str = "ic50",
+) -> None:
+    """Write mean-std and p-value table fragments for one DR scenario + metric.
+
+    Filenames written:
+      ``{stem}-mean-std.tex``
+      ``{stem}-pvalues.tex``
+
+    Parameters
+    ----------
+    prefix :
+        ``"residuals"`` or ``"ic50"`` (covers both relative and absolute IC50).
+        Determines which stacker and value column are used:
+        - ``"residuals"``: uses ``_stack_replicate_residuals_frames``,
+          value column ``"true_residuals"``
+        - ``"ic50"``: uses ``_stack_replicate_results_frames``,
+          value column ``"MSE"``
+    """
+    if prefix == "residuals":
+        df = util._stack_replicate_residuals_frames([data_1rep, data_2rep, data_3rep])
+        value_col = "true_residuals"
+    else:
+        df = util._stack_replicate_results_frames([data_1rep, data_2rep, data_3rep])
+        value_col = "MSE"
+
+    df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
+    df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=[value_col])
+
+    layouts = [
+        spec.display_type
+        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+    ]
+    pairs = [
+        (layouts[i], layouts[j])
+        for i in range(len(layouts))
+        for j in range(i + 1, len(layouts))
+    ]
+
+    util.write_latex_mean_std_table(
+        df=df,
+        group_col="replicates",
+        value_col=value_col,
+        group_values=[1, 2, 3],
+        layouts=layouts,
+        path=latex_tables_dir / f"{stem}-mean-std.tex",
+        group_label="Replicates",
+        bold_min=True,
+    )
+    util.write_latex_pvalue_table(
+        df=df,
+        group_col="replicates",
+        value_col=value_col,
+        group_values=[1, 2, 3],
+        layout_pairs=pairs,
+        path=latex_tables_dir / f"{stem}-pvalues.tex",
+        group_label="Comparison",
+    )
+
+
+def generate_dr_full_latex_tables(cfg: "DoseResponseConfig") -> None:
+    """Generate mean-std and p-value LaTeX table fragments for all
+    dose-response scenarios (residuals, relative IC50, absolute IC50).
+
+    For each combination of scenario group × (doses, dilution) × error level
+    six files are written to cfg.latex_tables_dir:
+
+      dr-residuals-mean-std-{doses}doses-dil{dil}-{label}-{error}.tex
+      dr-residuals-pvalues-{doses}doses-dil{dil}-{label}-{error}.tex
+      dr-relic50-mean-std-{doses}doses-dil{dil}-{label}-{error}.tex
+      dr-relic50-pvalues-{doses}doses-dil{dil}-{label}-{error}.tex
+      dr-absic50-mean-std-{doses}doses-dil{dil}-{label}-{error}.tex
+      dr-absic50-pvalues-{doses}doses-dil{dil}-{label}-{error}.tex
+    """
+    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
+    d = cfg.latex_tables_dir
+
+    # Map scenario id_text → short label for filenames (must match b_table_stats.tex)
+    LABEL_MAP = {
+        "curve_info-new-reg":                    "bowl",
+        "bowl-neg-control-new-reg":              "bowl-neg-controls",
+        "right-half-neg-control-log-new-reg":    "half-columns-neg-controls",
+    }
+
+    for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
+        label = LABEL_MAP[id_text]
+        for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+            for error_nl in error_nls:
+                stem_base = f"{doses}doses-dil{dilution}-{label}-{error_nl}"
+
+                r1, r2, r3 = _load_csv_triple(
+                    cfg, "residuals", doses, dilution, error_nl, id_text
+                )
+                _write_dr_table_pair(r1, r2, r3,
+                                     stem=f"dr-residuals-{stem_base}",
+                                     latex_tables_dir=d,
+                                     prefix="residuals")
+
+                rel1, rel2, rel3 = _load_csv_triple(
+                    cfg, "relative_ic50_data", doses, dilution, error_nl, id_text
+                )
+                _write_dr_table_pair(rel1, rel2, rel3,
+                                     stem=f"dr-relic50-{stem_base}",
+                                     latex_tables_dir=d,
+                                     prefix="ic50")
+
+                abs1, abs2, abs3 = _load_csv_triple(
+                    cfg, "absolute_ic50_data", doses, dilution, error_nl, id_text
+                )
+                _write_dr_table_pair(abs1, abs2, abs3,
+                                     stem=f"dr-absic50-{stem_base}",
+                                     latex_tables_dir=d,
+                                     prefix="ic50")
+
+
 def generate_example_curves(cfg: DoseResponseConfig) -> None:
     """
     Regenerates example per-compound curve PNGs for each layout type.
@@ -542,7 +664,7 @@ def main() -> None:
         default="all",
         help=(
             "simulate: generate CSVs; "
-            "figures:  ggenerate supplement PNGs; "
+            "figures:  generate supplement PNGs; "
             "tables:   generate LaTeX tables; "
             "curves:   generate example curve PNGs; "
             "all:      from simulate to figures to tables to curves"
@@ -557,6 +679,7 @@ def main() -> None:
         generate_dose_response_figures(cfg)
     if args.stage in ("tables", "all"):
         generate_ic50_latex_tables(cfg)
+        generate_dr_full_latex_tables(cfg)
     if args.stage in ("curves", "all"):
         generate_example_curves(cfg)
 

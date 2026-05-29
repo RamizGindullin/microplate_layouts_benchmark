@@ -371,6 +371,121 @@ def write_latex_pvalue_table(
 # AUC-specific LaTeX table writers  (screening ROC / PR)
 # ---------------------------------------------------------------------------
 
+def write_latex_metrics_table(
+    data_files: "list[str]",
+    error_levels: "list[float]",
+    metric: str,
+    layouts: "list[str]",
+    path: "Path | str",
+    kind: str = "mean-std",
+) -> None:
+    """Write a SSMD or Z-factor MSE table across bowl-error strengths.
+
+    Each file in *data_files* corresponds to one error level.  The table has
+    one row per layout (mean-std) or one row per layout pair (pvalues), and
+    one column per error level.  MSE is computed as
+    ``(metric_expected - metric_obtained)^2`` per row.  The best cell in each
+    column is **bolded** (minimum MSE).
+
+    Parameters
+    ----------
+    data_files :
+        Paths to metrics CSVs, one per error level (same order as
+        *error_levels*).
+    error_levels :
+        Error-strength values used as column headers.
+    metric :
+        ``"Zfactor"`` or ``"SSMD"``.
+    layouts :
+        Layout display names in display order.
+    path :
+        Output ``.tex`` file path.
+    kind :
+        ``"mean-std"`` or ``"pvalues"``.
+    """
+    from scipy import stats as _st
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build {error_level: DataFrame(layout, MSE)}
+    level_frames: "dict[float, pd.DataFrame]" = {}
+    for fpath, elevel in zip(data_files, error_levels):
+        df = pd.read_csv(fpath)
+        df = df[df["display_type"] != "display_type"]
+        df["display_type"] = df["display_type"].str.strip()
+        exp_col = f"{metric}_expected"
+        df[exp_col] = pd.to_numeric(df[exp_col], errors="coerce")
+        df[metric]  = pd.to_numeric(df[metric],  errors="coerce")
+        frames = []
+        for lay in layouts:
+            sub = df[df["display_type"].str.lower() == lay.lower()]
+            mse = np.square(sub[exp_col] - sub[metric]).dropna()
+            frames.append(pd.DataFrame({"layout": lay, "MSE": mse.values}))
+        level_frames[elevel] = pd.concat(frames, ignore_index=True)
+
+    col_spec     = "r" + "c" * len(error_levels)
+    header_cells = " & ".join(str(e) for e in error_levels)
+
+    if kind == "mean-std":
+        lines = [
+            rf"\begin{{tabular}}{{{col_spec}}}",
+            r"\toprule",
+            rf"Layout & {header_cells} \\",
+            r"\midrule",
+        ]
+        for lay in layouts:
+            row = [lay]
+            for elevel in error_levels:
+                vals = level_frames[elevel].loc[
+                    level_frames[elevel]["layout"] == lay, "MSE"
+                ]
+                if vals.empty or vals.isna().all():
+                    row.append("--")
+                else:
+                    col_means = [
+                        level_frames[elevel].loc[
+                            level_frames[elevel]["layout"] == l, "MSE"
+                        ].mean()
+                        for l in layouts
+                        if not level_frames[elevel].loc[
+                            level_frames[elevel]["layout"] == l, "MSE"
+                        ].empty
+                    ]
+                    best = min(v for v in col_means if not np.isnan(v))
+                    row.append(fmt_mean_std(vals.mean(), vals.std(), bold=(vals.mean() == best)))
+            lines.append(" & ".join(row) + r" \\")
+        lines += [r"\bottomrule", r"\end{tabular}"]
+
+    else:  # pvalues
+        pairs = [
+            (layouts[i], layouts[j])
+            for i in range(len(layouts))
+            for j in range(i + 1, len(layouts))
+        ]
+        lines = [
+            rf"\begin{{tabular}}{{{col_spec}}}",
+            r"\toprule",
+            rf"Comparison & {header_cells} \\",
+            r"\midrule",
+        ]
+        for lay_a, lay_b in pairs:
+            row = [f"{lay_a} -- {lay_b}"]
+            for elevel in error_levels:
+                a = level_frames[elevel].loc[level_frames[elevel]["layout"] == lay_a, "MSE"]
+                b = level_frames[elevel].loc[level_frames[elevel]["layout"] == lay_b, "MSE"]
+                if a.empty or b.empty:
+                    row.append("--")
+                else:
+                    _, pv = _st.ttest_ind(a, b, equal_var=False)
+                    row.append(fmt_pvalue_sci(pv))
+            lines.append(" & ".join(row) + r" \\")
+        lines += [r"\bottomrule", r"\end{tabular}"]
+
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
 def write_latex_ic50_pvalue_table(
     rel_1rep: "np.ndarray",
     rel_2rep: "np.ndarray",

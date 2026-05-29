@@ -602,19 +602,23 @@ def run_metrics(cfg: ScreeningConfig) -> None:
 # Stage 4: Auto-generated LaTeX AUC table
 # ---------------------------------------------------------------------------
 
-def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
-    """
-    Returns:
-        {hit_rate: {layout: {"roc": list[float], "pr": list[float]}}}
-    for the 10-10-0.2 scenario across all 6 hit rates.
-    """
+def _collect_per_batch_aucs_for(
+    cfg: "ScreeningConfig",
+    neg_controls: int,
+    pos_controls: int,
+    error: float,
+) -> dict:
+    """Return {hit_rate: {layout: {"roc": list, "pr": list}}} for one scenario."""
     hit_rates  = [1, 5, 10, 20, 30, 40]
     pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
     layouts    = SCREENING_LAYOUT_ORDER
 
     result: dict = {}
     for hit_rate, pna in zip(hit_rates, pna_values):
-        csv_name = f"screening-residuals-10-10-0.2-pna-{pna}{cfg.today_tag}.csv"
+        csv_name = (
+            f"screening-residuals-{pos_controls}-{neg_controls}-{error}"
+            f"-pna-{pna}{cfg.today_tag}.csv"
+        )
         csv_path = cfg.screening_data_dir / csv_name
         result[hit_rate] = {lay: {"roc": [], "pr": []} for lay in layouts}
         try:
@@ -639,6 +643,11 @@ def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
     return result
 
 
+def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
+    """Backwards-compatible wrapper for the primary 10-10-0.2 scenario."""
+    return _collect_per_batch_aucs_for(cfg, neg_controls=10, pos_controls=10, error=0.2)
+
+
 def _auc_summary(per_batch: dict, metric: str) -> dict:
     """
     From per_batch {hit_rate: {layout: {metric: list}}},
@@ -658,31 +667,121 @@ def _auc_summary(per_batch: dict, metric: str) -> dict:
 
 
 def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
-    """
-    Generate all 5 LaTeX table fragments for the screening 10-10-0.2 scenario.
+    """Generate ROC-AUC and PR-AUC LaTeX table fragments for every
+    (neg_controls, pos_controls, error) scenario in cfg.
 
-    Output files written to cfg.latex_tables_dir:
-      screening-roc-auc-10-10-0.2.tex      (b_table_stats Table 2)
-      screening-roc-pvalues-10-10-0.2.tex  (b_table_stats Table 3)
-      screening-pr-auc-10-10-0.2.tex       (b_table_stats Table 4)
-      screening-pr-pvalues-10-10-0.2.tex   (b_table_stats Table 5)
-      screening_pr_10-10-0.2.tex           (0b_figures_tables combined)
+    For each scenario four files are written to cfg.latex_tables_dir:
+      screening-roc-auc-{neg}-{pos}-{error}.tex
+      screening-roc-pvalues-{neg}-{pos}-{error}.tex
+      screening-pr-auc-{neg}-{pos}-{error}.tex
+      screening-pr-pvalues-{neg}-{pos}-{error}.tex
+
+    For the 10-10-0.2 scenario the combined main-paper table is also written:
+      screening_pr_10-10-0.2.tex  (imported by 0b_figures_tables.tex)
     """
     cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
     d  = cfg.latex_tables_dir
     hr = [1, 5, 10, 20, 30, 40]
     ly = SCREENING_LAYOUT_ORDER
 
-    per_batch = _collect_per_batch_aucs(cfg)
-    roc_summ  = _auc_summary(per_batch, "roc")
-    pr_summ   = _auc_summary(per_batch, "pr")
+    for neg, pos in cfg.neg_pos_controls_list:
+        for error in cfg.error_strength_list:
+            tag       = f"{neg}-{pos}-{error}"
+            per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
+            roc_summ  = _auc_summary(per_batch, "roc")
+            pr_summ   = _auc_summary(per_batch, "pr")
 
-    util.write_latex_auc_table(roc_summ, hr, ly, d / "screening-roc-auc-10-10-0.2.tex")
-    util.write_latex_auc_table(pr_summ,  hr, ly, d / "screening-pr-auc-10-10-0.2.tex")
-    util.write_latex_auc_pvalue_table(per_batch, "roc", hr, d / "screening-roc-pvalues-10-10-0.2.tex")
-    util.write_latex_auc_pvalue_table(per_batch, "pr",  hr, d / "screening-pr-pvalues-10-10-0.2.tex")
-    util.write_latex_combined_roc_pr_table(roc_summ, pr_summ, hr, ly, d / "screening_pr_10-10-0.2.tex")
+            util.write_latex_auc_table(
+                roc_summ, hr, ly, d / f"screening-roc-auc-{tag}.tex"
+            )
+            util.write_latex_auc_table(
+                pr_summ,  hr, ly, d / f"screening-pr-auc-{tag}.tex"
+            )
+            util.write_latex_auc_pvalue_table(
+                per_batch, "roc", hr, d / f"screening-roc-pvalues-{tag}.tex"
+            )
+            util.write_latex_auc_pvalue_table(
+                per_batch, "pr",  hr, d / f"screening-pr-pvalues-{tag}.tex"
+            )
 
+            # Combined main-paper table for the primary scenario only
+            if neg == 10 and pos == 10 and error == 0.2:
+                util.write_latex_combined_roc_pr_table(
+                    roc_summ, pr_summ, hr, ly,
+                    d / "screening_pr_10-10-0.2.tex",
+                )
+
+
+
+def generate_metrics_latex_tables(
+    cfg: "ScreeningConfig",
+    output_files: "list[str] | None" = None,
+) -> None:
+    """Generate SSMD and Z-factor MSE LaTeX table fragments for every
+    (neg_controls, pos_controls) pair across representative error levels.
+
+    Four files per (neg, pos) × metric are written to cfg.latex_tables_dir:
+      metrics-zfactor-mean-std-{neg}-{pos}.tex
+      metrics-zfactor-pvalues-{neg}-{pos}.tex
+      metrics-ssmd-mean-std-{neg}-{pos}.tex
+      metrics-ssmd-pvalues-{neg}-{pos}.tex
+
+    Parameters
+    ----------
+    output_files :
+        List of metrics CSV basenames (no directory).  When ``None`` the
+        directory ``cfg.metrics_data_dir`` is globbed for ``*.csv`` files.
+    """
+    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = cfg.metrics_data_dir
+    d        = cfg.latex_tables_dir
+    ly       = SCREENING_LAYOUT_ORDER
+
+    if output_files is None:
+        output_files = [p.name for p in sorted(data_dir.glob("*.csv"))]
+        if not output_files:
+            print("  WARNING: no metrics CSV files found — run --stage metrics first")
+            return
+
+    # Representative error levels shown in tables (subset of the full sweep)
+    representative_errors = cfg.error_strength_list  # e.g. [0.06, 0.10, 0.20]
+
+    for neg, pos in cfg.neg_pos_controls_list:
+        tag = f"{neg}-{pos}"
+        for metric in ("Zfactor", "SSMD"):
+            metric_files: "list[str]" = []
+            found_levels: "list[float]" = []
+            for elevel in representative_errors:
+                error_str = str(elevel)
+                candidates = [
+                    f for f in output_files
+                    if (f"-{neg}-{pos}-" in f or f"-{neg}_{pos}-" in f)
+                    and error_str in f
+                ]
+                if not candidates:
+                    candidates = [
+                        f for f in output_files
+                        if str(elevel) in f and str(neg) in f and str(pos) in f
+                    ]
+                if candidates:
+                    metric_files.append(str(data_dir / candidates[0]))
+                    found_levels.append(elevel)
+                else:
+                    print(f"  WARNING: no metrics file for ({neg},{pos}) error={elevel}")
+
+            if not metric_files:
+                print(f"  Skipping metrics tables for ({neg},{pos}) — no files found")
+                continue
+
+            for kind in ("mean-std", "pvalues"):
+                util.write_latex_metrics_table(
+                    data_files=metric_files,
+                    error_levels=found_levels,
+                    metric=metric,
+                    layouts=ly,
+                    path=d / f"metrics-{metric.lower()}-{kind}-{tag}.tex",
+                    kind=kind,
+                )
 
 # ---------------------------------------------------------------------------
 # CLI

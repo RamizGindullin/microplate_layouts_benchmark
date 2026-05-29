@@ -12,7 +12,7 @@ Replaces:
 Stages:
   simulate : generate CSVs under generated-data/dose-response/
   figures  : generate supplement PNGs
-  tables   : generate LaTex tables
+  tables   : generate LaTeX tables
   curves   : generate example curve PNGs
   all      : simulate to figures to tables to curves  (default)
 """
@@ -410,15 +410,16 @@ def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:
 # Stage 3: Tables
 # -----------------------------------------------------------------------
 
+
 def generate_ic50_latex_tables(cfg: DoseResponseConfig) -> None:
     """
     Generate ic50-pvalues-half-columns-neg-controls-0.4.tex
     (b_table_stats Table 1) from the 8-dose, error=0.4,
     right-half-neg-control scenario CSVs.
 
-    Uses create_latex_table_pvalues_wide from libraries/utilities.py
-    for the p-value computation (Welch t-test, matching the original
-    dose-response-experiments.ipynb notebook).
+    Table construction (Welch t-test, \\multirow formatting, scientific
+    notation) lives in util.write_latex_ic50_pvalue_table so it is shared
+    with any future benchmark that needs the same output structure.
     """
     cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
 
@@ -433,100 +434,11 @@ def generate_ic50_latex_tables(cfg: DoseResponseConfig) -> None:
     )
 
     out_path = cfg.latex_tables_dir / "ic50-pvalues-half-columns-neg-controls-0.4.tex"
-
-    # The supplement table wraps two \multirow blocks (Relative + Absolute)
-    # inside a single tabular.  We build it directly rather than using two
-    # separate create_latex_table_pvalues_wide calls so both blocks share one
-    # \begin{tabular}/\end{tabular}.
-    import re
-    from scipy import stats as _scipy_stats
-
-    def _fmt_sci(pval: float) -> str:
-        s = f"{pval:.2e}"
-        m = re.match(r"([0-9.]+)e([+-][0-9]+)", s)
-        if m:
-            mantissa = m.group(1).rstrip("0").rstrip(".")
-            exp = int(m.group(2))
-            return f"${mantissa}\\times 10^{{{exp}}}$"
-        return s
-
-    def _block(data_1rep, data_2rep, data_3rep, column_name, table_text):
-        """Return list of lines for one \\multirow block (no tabular delimiters)."""
-        results_df = util._stack_replicate_results_frames(
-            [data_1rep, data_2rep, data_3rep]
-        )
-        results_df[column_name] = pd.to_numeric(
-            results_df[column_name], errors="coerce"
-        )
-        results_df = results_df.replace([np.inf, -np.inf], np.nan).dropna(
-            subset=[column_name]
-        )
-        from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS
-        layouts = [
-            spec.display_type
-            for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-        ]
-        pairs = [
-            (layouts[i], layouts[j])
-            for i in range(len(layouts))
-            for j in range(i + 1, len(layouts))
-        ]
-        n_pairs = len(pairs)
-        block_lines = []
-        first = True
-        for lay_a, lay_b in pairs:
-            row_cells = []
-            for rep in (1, 2, 3):
-                a = results_df.loc[
-                    (results_df["layout"] == lay_a) & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-                b = results_df.loc[
-                    (results_df["layout"] == lay_b) & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-                if a.empty or b.empty:
-                    row_cells.append("--")
-                else:
-                    _, pv = _scipy_stats.ttest_ind(a, b, equal_var=False)
-                    row_cells.append(_fmt_sci(pv))
-            comparison = f"{lay_a} -- {lay_b}"
-            if first:
-                block_lines.append(
-                    rf"    \multirow{{{n_pairs}}}{{*}}{{{table_text}}} & {comparison} & "
-                    + " & ".join(row_cells) + r"\\ "
-                )
-                first = False
-            else:
-                block_lines.append(
-                    rf"     & {comparison} & " + " & ".join(row_cells) + r"\\ "
-                )
-        return block_lines
-
-    rel_lines = _block(rel_1, rel_2, rel_3, "MSE", r"Relative \ECIC{}")
-    abs_lines = _block(abs_1, abs_2, abs_3, "MSE", r"Absolute \ECIC{}")
-
-    lines = [
-        r"\begin{tabular}{ccccc}",
-        r"\toprule",
-        r"\textbf{Measurement} & \textbf{Comparison} & \textbf{1 replicate} & \textbf{2 replicates} & \textbf{3 replicates} \\",
-        r"\midrule",
-    ]
-    lines += rel_lines
-    lines.append(r"\midrule")
-    lines += abs_lines
-    lines += [r"\bottomrule", r"\end{tabular}"]
-
-    out_path.write_text("\n".join(lines))
-    print(f"  Written: {out_path}")
-
-# -----------------------------------------------------------------------
-# Stage 4: Curves
-# -----------------------------------------------------------------------
-
-# Curve example layouts are derived from benchmark_common.DOSE_RESPONSE_LAYOUT_SPECS
-# via dose_response_curve_examples(), so adding a new layout only requires updating
-# the central registry.
+    util.write_latex_ic50_pvalue_table(
+        rel_1, rel_2, rel_3,
+        abs_1, abs_2, abs_3,
+        path=out_path,
+    )
 
 
 def generate_example_curves(cfg: DoseResponseConfig) -> None:

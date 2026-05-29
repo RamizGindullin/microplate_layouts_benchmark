@@ -371,6 +371,104 @@ def write_latex_pvalue_table(
 # AUC-specific LaTeX table writers  (screening ROC / PR)
 # ---------------------------------------------------------------------------
 
+def write_latex_ic50_pvalue_table(
+    rel_1rep: "np.ndarray",
+    rel_2rep: "np.ndarray",
+    rel_3rep: "np.ndarray",
+    abs_1rep: "np.ndarray",
+    abs_2rep: "np.ndarray",
+    abs_3rep: "np.ndarray",
+    path: "Path | str",
+    column_name: str = "MSE",
+) -> None:
+    """Write the IC50 p-value tabular fragment (b_table_stats Table 1).
+
+    Produces a single ``\\begin{tabular}...\\end{tabular}`` with two
+    ``\\multirow`` blocks — Relative \\ECIC{} and Absolute \\ECIC{} —
+    with three replicate columns each.  P-values are formatted as
+    :math:`m \\times 10^{n}` in math mode.
+
+    Parameters
+    ----------
+    rel_1rep, rel_2rep, rel_3rep :
+        Arrays from ``relative_ic50_data`` CSVs for 1-, 2-, 3-replicate runs.
+    abs_1rep, abs_2rep, abs_3rep :
+        Arrays from ``absolute_ic50_data`` CSVs for 1-, 2-, 3-replicate runs.
+    path :
+        Output ``.tex`` file path (parent directory is created if needed).
+    column_name :
+        DataFrame column holding the numeric metric (default ``"MSE"``).
+    """
+    import re as _re
+    from scipy import stats as _st
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _fmt_sci(pval: float) -> str:
+        s = f"{pval:.2e}"
+        m = _re.match(r"([0-9.]+)e([+-][0-9]+)", s)
+        if m:
+            mantissa = m.group(1).rstrip("0").rstrip(".")
+            exp = int(m.group(2))
+            return f"${mantissa}\\times 10^{{{exp}}}$"
+        return s
+
+    def _pvalue_block(a1, a2, a3, block_label: str):
+        df = _stack_replicate_results_frames([a1, a2, a3])
+        df[column_name] = pd.to_numeric(df[column_name], errors="coerce")
+        df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=[column_name])
+        layouts = [
+            spec.display_type
+            for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
+        ]
+        pairs = [
+            (layouts[i], layouts[j])
+            for i in range(len(layouts))
+            for j in range(i + 1, len(layouts))
+        ]
+        n_pairs = len(pairs)
+        rows = []
+        for idx, (lay_a, lay_b) in enumerate(pairs):
+            cells = []
+            for rep in (1, 2, 3):
+                a = df.loc[
+                    (df["layout"] == lay_a) & (df["replicates"] == rep), column_name
+                ]
+                b = df.loc[
+                    (df["layout"] == lay_b) & (df["replicates"] == rep), column_name
+                ]
+                cells.append("--" if (a.empty or b.empty) else _fmt_sci(_st.ttest_ind(a, b, equal_var=False)[1]))
+            comparison = f"{lay_a} -- {lay_b}"
+            cell_str = " & ".join(cells)
+            if idx == 0:
+                rows.append(
+                    rf"    \multirow{{{n_pairs}}}{{*}}{{{block_label}}}"
+                    rf" & {comparison} & {cell_str}\\ "
+                )
+            else:
+                rows.append(rf"     & {comparison} & {cell_str}\\ ")
+        return rows
+
+    rel_rows = _pvalue_block(rel_1rep, rel_2rep, rel_3rep, r"Relative \ECIC{}")
+    abs_rows = _pvalue_block(abs_1rep, abs_2rep, abs_3rep, r"Absolute \ECIC{}")
+
+    lines = [
+        r"\begin{tabular}{ccccc}",
+        r"\toprule",
+        (r"\textbf{Measurement} & \textbf{Comparison} & "
+         r"\textbf{1 replicate} & \textbf{2 replicates} & \textbf{3 replicates} \\"),
+        r"\midrule",
+        *rel_rows,
+        r"\midrule",
+        *abs_rows,
+        r"\bottomrule",
+        r"\end{tabular}",
+    ]
+    path.write_text("\n".join(lines))
+    print(f"  Written: {path}")
+
+
 def write_latex_auc_table(summary, hit_rates, layouts, path):
     """Write a ROC-AUC or PR-AUC mean±std tabular fragment.
 
@@ -483,135 +581,7 @@ def write_latex_combined_roc_pr_table(roc_summary, pr_summary, hit_rates,
     print(f"  Written: {path}")
 
 
-# ---------------------------------------------------------------------------
-# TODO(superseded): create_latex_table_wide and create_latex_table_pvalues_wide
-# are superseded by write_latex_mean_std_table and write_latex_pvalue_table.
-# They are retained here only because run_dose_response_benchmark.py currently
-# calls them directly.  Once that script is updated to use the new API, these
-# functions can be removed.
-# ---------------------------------------------------------------------------
 
-def create_latex_table_wide(
-    data_1rep,
-    data_2rep,
-    data_3rep,
-    tex_filename,
-    table_text="Relative \\ECIC",
-    column_name="MSE",
-):
-    """LaTeX table of per-layout, per-replicate summary stats (mean ± std).
-
-    .. deprecated::
-        Superseded by :func:`write_latex_mean_std_table`.  Kept for backward
-        compatibility until ``run_dose_response_benchmark.py`` is updated.
-    """
-    latex_f = open(tex_filename, "w")
-
-    results_df = _stack_replicate_results_frames(
-        [data_1rep, data_2rep, data_3rep]
-    )
-
-    results_df[column_name] = pd.to_numeric(
-        results_df[column_name], errors="coerce"
-    )
-    results_df = results_df.replace([np.inf, -np.inf], np.nan)
-    results_df = results_df.dropna(subset=[column_name])
-
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
-
-    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
-    for layout in layouts:
-        latex_f.write(" & " + layout)
-    latex_f.write(r"\\ " + "\n")
-
-    for rep in (1, 2, 3):
-        latex_f.write(f"Rep {rep}")
-        for layout in layouts:
-            sub = results_df[
-                (results_df["layout"] == layout)
-                & (results_df["replicates"] == rep)
-            ][column_name]
-
-            if sub.empty:
-                cell = "--"
-            else:
-                mean = sub.mean()
-                std = sub.std()
-                cell = f"{mean:.2f} $\\pm$ ({std:.2f})"
-
-            latex_f.write(" & " + cell)
-        latex_f.write(r"\\ " + "\n")
-
-    latex_f.write(r"\hline" + "\n")
-    latex_f.close()
-
-
-def create_latex_table_pvalues_wide(
-    data_1rep,
-    data_2rep,
-    data_3rep,
-    tex_filename,
-    table_text="Relative \\ECIC",
-    column_name="MSE",
-):
-    """LaTeX table of per-replicate pairwise p-values between layouts.
-
-    .. deprecated::
-        Superseded by :func:`write_latex_pvalue_table`.  Kept for backward
-        compatibility until ``run_dose_response_benchmark.py`` is updated.
-    """
-    latex_f = open(tex_filename, "w")
-
-    results_df = _stack_replicate_results_frames(
-        [data_1rep, data_2rep, data_3rep]
-    )
-
-    results_df[column_name] = pd.to_numeric(
-        results_df[column_name], errors="coerce"
-    )
-    results_df = results_df.replace([np.inf, -np.inf], np.nan)
-    results_df = results_df.dropna(subset=[column_name])
-
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
-
-    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
-
-    for i, layout_1 in enumerate(layouts):
-        for layout_2 in layouts[i + 1 :]:
-            latex_f.write(" & " + layout_1 + " -- " + layout_2)
-
-            for rep in (1, 2, 3):
-                arr1 = results_df.loc[
-                    (results_df["layout"] == layout_1)
-                    & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-                arr2 = results_df.loc[
-                    (results_df["layout"] == layout_2)
-                    & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-
-                if arr1.empty or arr2.empty:
-                    cell = "--"
-                else:
-                    _, pvalue = stats.ttest_ind(
-                        arr1, arr2, equal_var=False
-                    )
-                    cell = f"{pvalue:.2e}"
-
-                latex_f.write(" & " + cell)
-
-            latex_f.write(r"\\ " + "\n")
-
-    latex_f.write(r"\hline" + "\n")
-    latex_f.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1093,141 +1063,6 @@ def plot_r2_percentage(
         bbox_inches="tight", dpi=300,
     )
     plt.close(fig)
-
-
-def create_latex_table_wide(
-    data_1rep,
-    data_2rep,
-    data_3rep,
-    tex_filename,
-    table_text="Relative \\ECIC",
-    column_name="MSE",
-):
-    """LaTeX table of per-layout, per-replicate summary stats (mean ± std).
-
-    Uses the layout registry and generic replicate stacker so adding a new
-    layout only requires updating DOSE_RESPONSE_LAYOUT_SPECS.
-    """
-    latex_f = open(tex_filename, "w")
-
-    # Stack 1/2/3-replicate arrays into a single long frame
-    results_df = _stack_replicate_results_frames(
-        [data_1rep, data_2rep, data_3rep]
-    )
-
-    # Clean numeric column
-    results_df[column_name] = pd.to_numeric(
-        results_df[column_name], errors="coerce"
-    )
-    results_df = results_df.replace([np.inf, -np.inf], np.nan)
-    results_df = results_df.dropna(subset=[column_name])
-
-    # Layout order driven by registry
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
-
-    # Header row: multirow label + layout names
-    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
-    for layout in layouts:
-        latex_f.write(" & " + layout)
-    latex_f.write(r"\\ " + "\n")
-
-    # One row per replicate, with mean ± std for each layout
-    for rep in (1, 2, 3):
-        latex_f.write(f"Rep {rep}")
-        for layout in layouts:
-            sub = results_df[
-                (results_df["layout"] == layout)
-                & (results_df["replicates"] == rep)
-            ][column_name]
-
-            if sub.empty:
-                cell = "--"
-            else:
-                mean = sub.mean()
-                std = sub.std()
-                cell = f"{mean:.2f} $\\pm$ ({std:.2f})"
-
-            latex_f.write(" & " + cell)
-        latex_f.write(r"\\ " + "\n")
-
-    latex_f.write(r"\hline" + "\n")
-    latex_f.close()
-
-    
-    
-    
-    
-    
-def create_latex_table_pvalues_wide(
-    data_1rep,
-    data_2rep,
-    data_3rep,
-    tex_filename,
-    table_text="Relative \\ECIC",
-    column_name="MSE",
-):
-    """LaTeX table of per-replicate pairwise p-values between layouts.
-
-    For each replicate (1,2,3) and each layout pair, writes a t-test p-value.
-    Layout ordering and membership come from DOSE_RESPONSE_LAYOUT_SPECS.
-    """
-    latex_f = open(tex_filename, "w")
-
-    # Stack arrays into a single long frame
-    results_df = _stack_replicate_results_frames(
-        [data_1rep, data_2rep, data_3rep]
-    )
-
-    results_df[column_name] = pd.to_numeric(
-        results_df[column_name], errors="coerce"
-    )
-    results_df = results_df.replace([np.inf, -np.inf], np.nan)
-    results_df = results_df.dropna(subset=[column_name])
-
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
-
-    latex_f.write(r"\multirow{4}{*}{" + table_text + "}")
-
-    # One block per layout pair, with three replicate p-values
-    for i, layout_1 in enumerate(layouts):
-        for layout_2 in layouts[i + 1 :]:
-            latex_f.write(" & " + layout_1 + " -- " + layout_2)
-
-            for rep in (1, 2, 3):
-                arr1 = results_df.loc[
-                    (results_df["layout"] == layout_1)
-                    & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-                arr2 = results_df.loc[
-                    (results_df["layout"] == layout_2)
-                    & (results_df["replicates"] == rep),
-                    column_name,
-                ]
-
-                if arr1.empty or arr2.empty:
-                    cell = "--"
-                else:
-                    _, pvalue = stats.ttest_ind(
-                        arr1, arr2, equal_var=False
-                    )
-                    cell = f"{pvalue:.2e}"
-
-                latex_f.write(" & " + cell)
-
-            latex_f.write(r"\\ " + "\n")
-
-    latex_f.write(r"\hline" + "\n")
-    latex_f.close()
-
-    
-    
 def full_controls_layout(layout, activity_layout, neg_control_id, pos_control_id):
     extended_controls_layout = np.copy(layout)
     num_rows, num_columns = layout.shape

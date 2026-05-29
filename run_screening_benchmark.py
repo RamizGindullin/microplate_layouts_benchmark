@@ -712,6 +712,95 @@ def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
                 )
 
 
+def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
+    """Generate overview ROC-AUC and PR-AUC tables spanning ALL control
+    configurations, error strengths, and hit rates.
+
+    Two files are written to cfg.latex_tables_dir:
+      screening-overview-roc.tex
+      screening-overview-pr.tex
+
+    Table layout:
+      Rows : groups of (neg, pos, error); within each group one sub-row per
+             hit rate.  A \\midrule separates groups.
+      Cols : one column per layout (Random, PLAID, COMPD) with mean +\- std.
+             COMPD cell gets a significance superscript (* / ** / ***)
+             versus PLAID based on a Welch t-test of per-batch AUC vectors.
+
+    Data source is identical to generate_auc_latex_tables —
+    _collect_per_batch_aucs_for / _auc_summary — so no re-simulation is needed.
+    """
+    from scipy import stats as _st
+
+    cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
+    layouts   = SCREENING_LAYOUT_ORDER
+    hit_rates = [1, 5, 10, 20, 30, 40]
+    LABEL_MAP = {0.06: "mild", 0.1: "moderate", 0.2: "strong"}
+
+    def _sig_flag(a_vals: list, b_vals: list) -> str:
+        """Return LaTeX superscript for COMPD-vs-PLAID significance."""
+        if len(a_vals) < 2 or len(b_vals) < 2:
+            return ""
+        _, p = _st.ttest_ind(a_vals, b_vals, equal_var=False)
+        if p < 0.001:
+            return r"$^{***}$"
+        if p < 0.01:
+            return r"$^{**}$"
+        if p < 0.05:
+            return r"$^{*}$"
+        return ""
+
+    for metric in ("roc", "pr"):
+        col_spec = "ll" + "c" * len(layouts)
+        lines = [
+            rf"\begin{{tabular}}{{{col_spec}}}",
+            r"\toprule",
+            r"Config & Hit rate & " + " & ".join(layouts) + r" \\",
+            r"\midrule",
+        ]
+
+        first_group = True
+        for neg, pos in cfg.neg_pos_controls_list:
+            for error in cfg.error_strength_list:
+                per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
+                summ      = _auc_summary(per_batch, metric)
+
+                group_label = (
+                    f"{neg}--{pos}, {LABEL_MAP.get(error, str(error))} bowl"
+                )
+
+                if not first_group:
+                    lines.append(r"\midrule")
+                first_group = False
+
+                for i, hr in enumerate(hit_rates):
+                    cfg_cell = group_label if i == 0 else ""
+
+                    means = [summ[hr][lay][0] for lay in layouts]
+                    valid_means = [m for m in means if not np.isnan(m)]
+                    best = max(valid_means) if valid_means else float("nan")
+
+                    row = [cfg_cell, f"{hr}\\%"]
+                    for lay in layouts:
+                        mean, std = summ[hr][lay]
+                        if np.isnan(mean):
+                            cell = "--"
+                        else:
+                            cell = util.fmt_mean_std(mean, std, bold=(mean == best))
+                            if lay == "COMPD":
+                                plaid_vals = per_batch[hr].get("PLAID", {}).get(metric, [])
+                                compd_vals = per_batch[hr].get("COMPD", {}).get(metric, [])
+                                cell += _sig_flag(plaid_vals, compd_vals)
+                        row.append(cell)
+
+                    lines.append(" & ".join(row) + r" \\")
+
+        lines += [r"\bottomrule", r"\end{tabular}"]
+
+        out_path = cfg.latex_tables_dir / f"screening-overview-{metric}.tex"
+        out_path.write_text("\n".join(lines))
+        print(f"  Written: {out_path}")
+
 
 def generate_metrics_latex_tables(
     cfg: "ScreeningConfig",
@@ -818,6 +907,8 @@ def main() -> None:
         run_metrics(cfg)
     if args.stage in ("tables", "all"):
         generate_auc_latex_tables(cfg)
+        generate_auc_overview_tables(cfg)
+        generate_metrics_latex_tables(cfg)
 
 
 if __name__ == "__main__":

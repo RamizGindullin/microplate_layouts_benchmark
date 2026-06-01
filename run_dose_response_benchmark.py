@@ -652,11 +652,17 @@ def _write_dr_overview_table(
 ) -> None:
     """Write a compact overview LaTeX tabular fragment from *df*.
 
-    Rows : one per (scenario_label, doses, dilution, error_nl) combo,
-           averaged over replicates 1–3.
-    Cols : one per layout with mean±std (std over replicates).
-           Best layout per row bolded.
-           COMPD gets significance superscript vs PLAID (* / ** / ***).
+    Row structure:
+      - Top-level groups: scenario (bowl neg-unaffected / neg-affected / column).
+        A \\midrule separates scenario groups.
+      - Within each scenario: one sub-group per (doses, dilution, error_nl).
+        A \\cmidrule separates sub-groups.
+      - Within each sub-group: one row per replicate count (1, 2, 3).
+
+    Columns: Scenario | Doses | Dil. (1:N) | Error | Rep. | <layouts...>
+
+    Best layout per row is bolded.  COMPD gets a significance superscript
+    (* / ** / ***) vs PLAID from a Welch t-test on available values.
     """
     from scipy import stats as _st
 
@@ -669,59 +675,73 @@ def _write_dr_overview_table(
         if p < 0.05:  return r"$^{*}$"
         return ""
 
-    col_spec = "llcc" + "c" * len(layouts)   # scenario, doses, dilution, error + layouts
+    replicates_list = sorted(df["replicates"].unique())
+    n_data_cols = 5 + len(layouts)
+    col_spec = "lllcc" + "c" * len(layouts)
+    cmidrule = rf"\cmidrule{{2-{n_data_cols}}}"
+
     lines = [
         rf"\begin{{tabular}}{{{col_spec}}}",
         r"\toprule",
-        r"Scenario & Doses & Dil. & Error & " + " & ".join(layouts) + r" \\",
+        (r"Scenario & Doses & Dil.\ (1:N) & Error & Rep. & "
+         + " & ".join(layouts) + r" \\"),
         r"\midrule",
     ]
 
-    groups = df.groupby(
-        ["scenario_label", "doses", "dilution", "error_nl"], sort=False
-    )
-
-    prev_scenario = None
-    for (scenario, doses, dil, enl), _ in groups:
-        if scenario != prev_scenario and prev_scenario is not None:
+    scenarios = list(dict.fromkeys(df["scenario_label"]))
+    for s_idx, scenario in enumerate(scenarios):
+        if s_idx > 0:
             lines.append(r"\midrule")
-        prev_scenario = scenario
 
-        # Per-layout: collect per-replicate means, then mean±std across replicates
-        lay_means = {}
-        lay_stds  = {}
-        lay_vals  = {}    # raw list for significance test
-        for lay in layouts:
-            sub = df[
-                (df["scenario_label"] == scenario)
-                & (df["doses"]  == doses)
-                & (df["dilution"] == dil)
-                & (df["error_nl"] == enl)
-                & (df["layout"] == lay)
-            ]["value"].dropna()
-            lay_vals[lay] = sub.tolist()
-            lay_means[lay] = float(sub.mean()) if not sub.empty else float("nan")
-            lay_stds[lay]  = float(sub.std())  if len(sub) > 1 else float("nan")
+        sc_df = df[df["scenario_label"] == scenario]
+        seen = {}
+        for _, row in sc_df.iterrows():
+            key = (row["doses"], row["dilution"], row["error_nl"])
+            seen[key] = None
+        sub_groups = list(seen.keys())
 
-        valid = [v for v in lay_means.values() if not np.isnan(v)]
-        best  = (min(valid) if bold_min else max(valid)) if valid else float("nan")
+        for sg_idx, (doses, dil, enl) in enumerate(sub_groups):
+            if sg_idx > 0:
+                lines.append(cmidrule)
 
-        row = [scenario, str(doses), str(dil), str(enl)]
-        for lay in layouts:
-            m, s = lay_means[lay], lay_stds[lay]
-            if np.isnan(m):
-                cell = "--"
-            else:
-                is_best = (m == best)
-                val_str = f"{m:.4f}"
-                std_str = f"{s:.4f}" if not np.isnan(s) else "?"
-                cell    = rf"\textbf{{{val_str}±{std_str}}}" if is_best \
-                          else f"{val_str}±{std_str}"
-                if lay == "COMPD":
-                    cell += _sig_flag(lay_vals.get("PLAID", []), lay_vals.get("COMPD", []))
-            row.append(cell)
+            for ri, rep in enumerate(replicates_list):
+                scenario_cell = scenario if (sg_idx == 0 and ri == 0) else ""
+                doses_cell    = str(int(doses)) if ri == 0 else ""
+                dil_cell      = str(int(dil))   if ri == 0 else ""
+                enl_cell      = str(enl)        if ri == 0 else ""
+                rep_cell      = str(int(rep))
 
-        lines.append(" & ".join(row) + r" \\")
+                sub = df[
+                    (df["scenario_label"] == scenario)
+                    & (df["doses"]       == doses)
+                    & (df["dilution"]    == dil)
+                    & (df["error_nl"]    == enl)
+                    & (df["replicates"]  == rep)
+                ]
+                lay_vals  = {lay: sub[sub["layout"] == lay]["value"].dropna().tolist()
+                             for lay in layouts}
+                lay_means = {lay: float(np.nanmean(v)) if v else float("nan")
+                             for lay, v in lay_vals.items()}
+
+                valid = [m for m in lay_means.values() if not np.isnan(m)]
+                best  = (min(valid) if bold_min else max(valid)) if valid else float("nan")
+
+                row = [scenario_cell, doses_cell, dil_cell, enl_cell, rep_cell]
+                for lay in layouts:
+                    m = lay_means[lay]
+                    if np.isnan(m):
+                        cell = "--"
+                    else:
+                        val_str = f"{m:.4f}"
+                        cell = rf"\textbf{{{val_str}}}" if m == best else val_str
+                        if lay == "COMPD":
+                            cell += _sig_flag(
+                                lay_vals.get("PLAID", []),
+                                lay_vals.get("COMPD", []),
+                            )
+                    row.append(cell)
+
+                lines.append(" & ".join(row) + r" \\")
 
     lines += [r"\bottomrule", r"\end{tabular}"]
     path.parent.mkdir(parents=True, exist_ok=True)

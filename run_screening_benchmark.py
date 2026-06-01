@@ -713,22 +713,23 @@ def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
 
 
 def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
-    """Generate overview ROC-AUC and PR-AUC tables spanning ALL control
-    configurations, error strengths, and hit rates.
+    """Generate overview ROC-AUC and PR-AUC tables split by bowl-effect strength.
 
-    Two files are written to cfg.latex_tables_dir:
-      screening-overview-roc.tex
-      screening-overview-pr.tex
+    One table per (metric, effect_strength) is written to cfg.latex_tables_dir:
+      screening-overview-roc-mild.tex
+      screening-overview-roc-moderate.tex
+      screening-overview-roc-strong.tex
+      screening-overview-pr-mild.tex
+      screening-overview-pr-moderate.tex
+      screening-overview-pr-strong.tex
 
-    Table layout:
-      Rows : groups of (neg, pos, error); within each group one sub-row per
-             hit rate.  A \\midrule separates groups.
-      Cols : one column per layout (Random, PLAID, COMPD) with mean +\- std.
-             COMPD cell gets a significance superscript (* / ** / ***)
-             versus PLAID based on a Welch t-test of per-batch AUC vectors.
+    Each table has 18 rows: all 3 control configurations x 6 hit rates.
+    Columns: Config, Hit rate, Random, PLAID, COMPD.
+    The COMPD cell receives a significance superscript (* / ** / ***)
+    versus PLAID based on a Welch t-test of per-batch AUC vectors.
 
-    Data source is identical to generate_auc_latex_tables —
-    _collect_per_batch_aucs_for / _auc_summary — so no re-simulation is needed.
+    Data source is identical to generate_auc_latex_tables --
+    _collect_per_batch_aucs_for / _auc_summary -- so no re-simulation is needed.
     """
     from scipy import stats as _st
 
@@ -750,24 +751,22 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
             return r"$^{*}$"
         return ""
 
-    for metric in ("roc", "pr"):
-        col_spec = "ll" + "c" * len(layouts)
-        lines = [
-            rf"\begin{{tabular}}{{{col_spec}}}",
-            r"\toprule",
-            r"Config & Hit rate & " + " & ".join(layouts) + r" \\",
-            r"\midrule",
-        ]
+    for error in cfg.error_strength_list:
+        strength_label = LABEL_MAP.get(error, str(error))
+        for metric in ("roc", "pr"):
+            col_spec = "ll" + "c" * len(layouts)
+            lines = [
+                rf"\begin{{tabular}}{{{col_spec}}}",
+                r"\toprule",
+                r"Config & Hit rate & " + " & ".join(layouts) + r" \\",
+                r"\midrule",
+            ]
 
-        first_group = True
-        for neg, pos in cfg.neg_pos_controls_list:
-            for error in cfg.error_strength_list:
+            first_group = True
+            for neg, pos in cfg.neg_pos_controls_list:
                 per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
                 summ      = _auc_summary(per_batch, metric)
-
-                group_label = (
-                    f"{neg}--{pos}, {LABEL_MAP.get(error, str(error))} bowl"
-                )
+                group_label = f"{neg}--{pos}"
 
                 if not first_group:
                     lines.append(r"\midrule")
@@ -795,11 +794,11 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
 
                     lines.append(" & ".join(row) + r" \\")
 
-        lines += [r"\bottomrule", r"\end{tabular}"]
+            lines += [r"\bottomrule", r"\end{tabular}"]
 
-        out_path = cfg.latex_tables_dir / f"screening-overview-{metric}.tex"
-        out_path.write_text("\n".join(lines))
-        print(f"  Written: {out_path}")
+            out_path = cfg.latex_tables_dir / f"screening-overview-{metric}-{strength_label}.tex"
+            out_path.write_text("\n".join(lines))
+            print(f"  Written: {out_path}")
 
 
 def generate_metrics_latex_tables(

@@ -47,57 +47,201 @@ Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild
 
 \clearpage
 
+% Compact paper figures (one per experiment type) — kept here for a quick summary.
 \input{tikz-figures/dose_response__paper}
 \input{tikz-figures/screening_data__paper}
-
 \clearpage
+%%============================================================
+\section{Dose-response experiments}
+%%============================================================
+\clearpage
+%%------------------------------------------------------------
+\subsection{Qualitative curve behaviour}
+%%------------------------------------------------------------
 
-\subsection*{Dose-response experiments}
+\input{tikz-figures/dose_response_dr_curves}
+\clearpage
+%%------------------------------------------------------------
+\subsection{Error in maximum response across plate effects}
+%%------------------------------------------------------------
 
-% Residuals / goodness-of-fit subsection:
+\input{tikz-figures/dose_response_d_dist_bowl_no_neg}
+\input{tikz-figures/dose_response_d_dist_bowl_neg}
+\input{tikz-figures/dose_response_d_dist_column_neg}
+\clearpage
+%%------------------------------------------------------------
+\subsection{Relative IC50/EC50 errors}
+%%------------------------------------------------------------
+
 \begin{table}[!h]
-  \caption{Residual MSE overview across all dose-response scenarios.}
-  \label{tab:dr-residuals-overview}
-  \centering
-  \input{tables/dr-overview-residuals}
-\end{table}
-
-% Relative IC50/EC50 subsection:
-\begin{table}[!h]
-  \caption{Relative IC50/EC50 MSE overview across all dose-response scenarios.}
+  \caption{%
+    Relative IC50/EC50 MSE overview across all dose-response scenarios.
+    Each cell shows the mean value for the given layout; the best (lowest)
+    value per row is \textbf{bolded}.
+    Superscripts $^{*}$/$^{**}$/$^{***}$ indicate COMPD\,vs.\,PLAID
+    Welch $t$-test significance at $p{<}0.05/0.01/0.001$.
+  }
   \label{tab:dr-relic50-overview}
   \centering
   \input{tables/dr-overview-rel-ic50}
 \end{table}
 
-% Absolute IC50/EC50 subsection:
+\input{tikz-figures/dose_response_relic50_bowl_no_neg}
+\input{tikz-figures/dose_response_relic50_bowl_neg}
+\input{tikz-figures/dose_response_relic50_column_neg}
+\clearpage
+%%------------------------------------------------------------
+\subsection{Absolute IC50/EC50 errors}
+%%------------------------------------------------------------
+
 \begin{table}[!h]
-  \caption{Absolute IC50/EC50 MSE overview across all dose-response scenarios.}
+  \caption{%
+    Absolute IC50/EC50 MSE overview across all dose-response scenarios.
+    Best (lowest) value per row is \textbf{bolded}.
+    Superscripts as above.
+  }
   \label{tab:dr-absic50-overview}
   \centering
   \input{tables/dr-overview-abs-ic50}
 \end{table}
 
-\subsection*{ROC and PR AUC -- overview across all configurations}
+\input{tikz-figures/dose_response_absic50_bowl_no_neg}
+\input{tikz-figures/dose_response_absic50_bowl_neg}
+\input{tikz-figures/dose_response_absic50_column_neg}
 
-Table~\ref{tab:screening-roc-overview} and~\ref{tab:screening-pr-overview}
-summarise ROC-AUC and PR-AUC across all control configurations (8--8, 10--10,
-20--10) and bowl-effect strengths.  Superscripts $^{*}$/$^{**}$/$^{***}$
-indicate COMPD\,vs.\,PLAID Welch $t$-test significance at $p<0.05/0.01/0.001$.
+%%------------------------------------------------------------
+\subsection{Residuals and goodness-of-fit}
+%%------------------------------------------------------------
+\clearpage
+\begin{table}[!h]
+  \caption{%
+    Residual MSE overview across all dose-response scenarios.
+    Best (lowest) value per row is \textbf{bolded}.
+    Superscripts as above.
+  }
+  \label{tab:dr-residuals-overview}
+  \centering
+  \input{tables/dr-overview-residuals}
+\end{table}
+
+\input{tikz-figures/dose_response_residuals_bowl_no_neg}
+\input{tikz-figures/dose_response_residuals_column_neg}
+
+\input{tikz-figures/dose_response_percentage_bowl_no_neg}
+\input{tikz-figures/dose_response_percentage_bowl_neg}
+\input{tikz-figures/dose_response_percentage_column_neg}
+
+%%============================================================
+\section{Screening experiments}
+%%============================================================
+\clearpage
+%%------------------------------------------------------------
+\subsection{Expected vs.\ obtained plate summaries}
+%%------------------------------------------------------------
+
+\input{tikz-figures/screening_data_expected_obtained1}
+\input{tikz-figures/screening_data_expected_obtained2}
+\input{tikz-figures/screening_data_expected_obtained3}
+\clearpage
+%%------------------------------------------------------------
+\subsection{ROC and PR curves across hit rates}
+%%------------------------------------------------------------
+
+\input{tikz-figures/screening_data_roc_strong}
+\input{tikz-figures/screening_data_roc_strong_8_8}
+
+\input{tikz-figures/screening_data_pr_strong}
+\input{tikz-figures/screening_data_pr_strong_8_8}
+
+% Overview tables: ROC/PR AUC across all control configurations and hit rates.
+% Generated by: python run_screening_benchmark.py --stage tables
+% Output files: tables/screening-overview-{roc,pr}-{mild,moderate,strong}.tex
+\clearpage
+\subsubsection*{Mild bowl effect (error 0.06)}
 
 \begin{table}[!h]
-  \caption{ROC-AUC overview: mean$\pm$std across all screening configurations.}
-  \label{tab:screening-roc-overview}
+  \caption{%
+    ROC-AUC across control configurations and hit rates ---
+    mild bowl effect (error~0.06).
+    Mean values; best per row \textbf{bolded}.
+    $^{*}$/$^{**}$/$^{***}$: COMPD\,vs.\,PLAID $p{<}0.05/0.01/0.001$.
+  }
+  \label{tab:screening-roc-mild}
   \centering
-  \input{tables/screening-overview-roc}
+  \input{tables/screening-overview-roc-mild}
 \end{table}
 
 \begin{table}[!h]
-  \caption{PR-AUC overview: mean$\pm$std across all screening configurations.}
-  \label{tab:screening-pr-overview}
+  \caption{%
+    PR-AUC across control configurations and hit rates ---
+    mild bowl effect (error~0.06).
+  }
+  \label{tab:screening-pr-mild}
   \centering
-  \input{tables/screening-overview-pr}
+  \input{tables/screening-overview-pr-mild}
 \end{table}
+\clearpage
+
+\subsubsection*{Moderate bowl effect (error 0.10)}
+
+\begin{table}[!h]
+  \caption{%
+    ROC-AUC across control configurations and hit rates ---
+    moderate bowl effect (error~0.10).
+  }
+  \label{tab:screening-roc-moderate}
+  \centering
+  \input{tables/screening-overview-roc-moderate}
+\end{table}
+
+\begin{table}[!h]
+  \caption{%
+    PR-AUC across control configurations and hit rates ---
+    moderate bowl effect (error~0.10).
+  }
+  \label{tab:screening-pr-moderate}
+  \centering
+  \input{tables/screening-overview-pr-moderate}
+\end{table}
+\clearpage
+
+\subsubsection*{Strong bowl effect (error 0.20)}
+
+\begin{table}[!h]
+  \caption{%
+    ROC-AUC across control configurations and hit rates ---
+    strong bowl effect (error~0.20).
+  }
+  \label{tab:screening-roc-strong}
+  \centering
+  \input{tables/screening-overview-roc-strong}
+\end{table}
+
+\begin{table}[!h]
+  \caption{%
+    PR-AUC across control configurations and hit rates ---
+    strong bowl effect (error~0.20).
+  }
+  \label{tab:screening-pr-strong}
+  \centering
+  \input{tables/screening-overview-pr-strong}
+\end{table}
+\clearpage
+%%------------------------------------------------------------
+\subsection{SSMD and Z\'-factor robustness}
+%%------------------------------------------------------------
+
+\input{tikz-figures/screening_data_z_factor}
+\input{tikz-figures/screening_data_ssmd}
+\clearpage
+%%============================================================
+\section{Extended robustness and full numeric results}
+%%============================================================
+
+The following section reproduces all per-scenario tables (AUC values,
+p-values, SSMD/Z\'-factor metrics) that were generated by the benchmark
+scripts.  These tables serve as the exhaustive numeric record underlying
+the overview tables in Sections~1 and~2 above.
 
 \clearpage
 

@@ -563,28 +563,25 @@ def generate_dr_full_latex_tables(cfg: "DoseResponseConfig") -> None:
                                      prefix="ic50")
 
 
-def _build_dr_overview_df(
+def _build_dr_overview_df_for_scenario(
     cfg: "DoseResponseConfig",
     prefix: str,
+    id_text: str,
+    error_nls,
 ) -> "pd.DataFrame":
-    """Collect all dose-response scenario data for one metric into a single
-    long-form DataFrame.
+    """Collect dose-response data for ONE scenario into a long-form DataFrame.
 
     Parameters
     ----------
     prefix : {"residuals", "relic50", "absic50"}
-        Selects which CSV family to load and which value column to extract.
+    id_text : scenario key, e.g. "curve_info-new-reg"
+    error_nls : iterable of error levels for this scenario
 
     Returns
     -------
     DataFrame with columns:
-      scenario_label, doses, dilution, error_nl, replicates, layout, value
+      doses, dilution, error_nl, replicates, layout, value
     """
-    LABEL_MAP = {
-        "curve_info-new-reg":                 "bowl (neg unaffected)",
-        "bowl-neg-control-new-reg":           "bowl (neg affected)",
-        "right-half-neg-control-log-new-reg": "column (half-plate)",
-    }
     data_prefix_map = {
         "residuals": "residuals",
         "relic50":   "relative_ic50_data",
@@ -595,53 +592,83 @@ def _build_dr_overview_df(
         "relic50":   "MSE",
         "absic50":   "MSE",
     }
-    csv_prefix  = data_prefix_map[prefix]
-    value_col   = value_col_map[prefix]
+    LABEL_MAP = {
+        "curve_info-new-reg":                 "bowl (neg unaffected)",
+        "bowl-neg-control-new-reg":           "bowl (neg affected)",
+        "right-half-neg-control-log-new-reg": "column (half-plate)",
+    }
+
+    csv_prefix    = data_prefix_map[prefix]
+    value_col     = value_col_map[prefix]
+    scenario_label = LABEL_MAP[id_text]
     layouts = [
         spec.display_type
         for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
     ]
 
     rows = []
-    for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
-        scenario_label = LABEL_MAP[id_text]
-        for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
-            for error_nl in error_nls:
-                try:
-                    d1, d2, d3 = _load_csv_triple(
-                        cfg, csv_prefix, doses, dilution, error_nl, id_text
-                    )
-                except Exception as exc:
-                    print(f"  WARNING: skipping {scenario_label} {doses}d "
-                          f"dil{dilution} e{error_nl}: {exc}")
-                    continue
-
-                if prefix == "residuals":
-                    df_long = util._stack_replicate_residuals_frames([d1, d2, d3])
-                else:
-                    df_long = util._stack_replicate_results_frames([d1, d2, d3])
-
-                df_long[value_col] = pd.to_numeric(df_long[value_col], errors="coerce")
-                df_long = df_long.replace([np.inf, -np.inf], np.nan).dropna(
-                    subset=[value_col]
+    for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+        for error_nl in error_nls:
+            try:
+                d1, d2, d3 = _load_csv_triple(
+                    cfg, csv_prefix, doses, dilution, error_nl, id_text
                 )
+            except Exception as exc:
+                print(
+                    f"  WARNING: skipping {scenario_label} "
+                    f"{doses}d dil{dilution} e{error_nl}: {exc}"
+                )
+                continue
 
-                for lay in layouts:
-                    sub = df_long[df_long["layout"] == lay]
-                    for rep in [1, 2, 3]:
-                        vals = sub.loc[sub["replicates"] == rep, value_col]
-                        rows.append(
-                            dict(
-                                scenario_label=scenario_label,
-                                doses=doses,
-                                dilution=dilution,
-                                error_nl=error_nl,
-                                replicates=rep,
-                                layout=lay,
-                                value=float(vals.mean()) if not vals.empty else float("nan"),
-                            )
+            if prefix == "residuals":
+                df_long = util._stack_replicate_residuals_frames([d1, d2, d3])
+            else:
+                df_long = util._stack_replicate_results_frames([d1, d2, d3])
+
+            df_long[value_col] = pd.to_numeric(df_long[value_col], errors="coerce")
+            df_long = df_long.replace([np.inf, -np.inf], np.nan).dropna(
+                subset=[value_col]
+            )
+
+            for lay in layouts:
+                sub = df_long[df_long["layout"] == lay]
+                for rep in [1, 2, 3]:
+                    vals = sub.loc[sub["replicates"] == rep, value_col]
+                    rows.append(
+                        dict(
+                            doses=doses,
+                            dilution=dilution,
+                            error_nl=error_nl,
+                            replicates=rep,
+                            layout=lay,
+                            value=float(vals.mean()) if not vals.empty else float("nan"),
                         )
+                    )
     return pd.DataFrame(rows)
+
+
+def _build_dr_overview_df(
+    cfg: "DoseResponseConfig",
+    prefix: str,
+) -> "pd.DataFrame":
+    """Collect data for ALL scenarios (kept for backward compatibility).
+
+    Calls _build_dr_overview_df_for_scenario for each scenario group and
+    adds a 'scenario_label' column.  Existing code that calls this function
+    directly is unaffected.
+    """
+    LABEL_MAP = {
+        "curve_info-new-reg":                 "bowl (neg unaffected)",
+        "bowl-neg-control-new-reg":           "bowl (neg affected)",
+        "right-half-neg-control-log-new-reg": "column (half-plate)",
+    }
+    frames = []
+    for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
+        df = _build_dr_overview_df_for_scenario(cfg, prefix, id_text, error_nls)
+        if not df.empty:
+            df.insert(0, "scenario_label", LABEL_MAP[id_text])
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def _write_dr_overview_table(
@@ -649,20 +676,32 @@ def _write_dr_overview_table(
     layouts: "list[str]",
     path: "Path",
     bold_min: bool = True,
+    show_scenario_col: bool = True,
 ) -> None:
     """Write a compact overview LaTeX tabular fragment from *df*.
 
-    Row structure:
-      - Top-level groups: scenario (bowl neg-unaffected / neg-affected / column).
-        A \\midrule separates scenario groups.
-      - Within each scenario: one sub-group per (doses, dilution, error_nl).
-        A \\cmidrule separates sub-groups.
-      - Within each sub-group: one row per replicate count (1, 2, 3).
+    Parameters
+    ----------
+    show_scenario_col : bool
+        True  (default) – include a leading "Scenario" column and group rows
+                          by scenario_label.  Use when df covers multiple
+                          scenarios (backward-compatible behaviour).
+        False           – omit the Scenario column entirely.  Use when each
+                          file covers exactly one scenario; the scenario name
+                          belongs in the LaTeX caption instead.
 
-    Columns: Scenario | Doses | Dil. (1:N) | Error | Rep. | <layouts...>
+    Row structure when show_scenario_col=False:
+      Top-level groups: (doses, dilution, error_nl).  A \cmidrule separates
+      groups.  Within each group: one row per replicate count (1, 2, 3).
+
+    Row structure when show_scenario_col=True (original behaviour):
+      Same as above, but wrapped in an outer scenario grouping separated by
+      \midrule.
+
+    Columns: [Scenario |] Doses | Dil.\ (1:N) | Error | Rep. | <layouts>
 
     Best layout per row is bolded.  COMPD gets a significance superscript
-    (* / ** / ***) vs PLAID from a Welch t-test on available values.
+    (* / ** / ***) vs PLAID from a Welch t-test.
     """
     from scipy import stats as _st
 
@@ -676,26 +715,35 @@ def _write_dr_overview_table(
         return ""
 
     replicates_list = sorted(df["replicates"].unique())
-    n_data_cols = 5 + len(layouts)
-    col_spec = "lllcc" + "c" * len(layouts)
-    cmidrule = rf"\cmidrule{{2-{n_data_cols}}}"
+
+    if show_scenario_col:
+        n_data_cols = 5 + len(layouts)
+        col_spec    = "lllcc" + "c" * len(layouts)
+        cmidrule    = rf"\cmidrule{{2-{n_data_cols}}}"
+        header      = (
+            r"Scenario & Doses & Dil.\ (1:N) & Error & Rep. & "
+            + " & ".join(layouts) + r" \\"
+        )
+    else:
+        n_data_cols = 4 + len(layouts)
+        col_spec    = "lccc" + "c" * len(layouts)
+        cmidrule    = rf"\cmidrule{{1-{n_data_cols}}}"
+        header      = (
+            r"Doses & Dil.\ (1:N) & Error & Rep. & "
+            + " & ".join(layouts) + r" \\"
+        )
 
     lines = [
         rf"\begin{{tabular}}{{{col_spec}}}",
         r"\toprule",
-        (r"Scenario & Doses & Dil.\ (1:N) & Error & Rep. & "
-         + " & ".join(layouts) + r" \\"),
+        header,
         r"\midrule",
     ]
 
-    scenarios = list(dict.fromkeys(df["scenario_label"]))
-    for s_idx, scenario in enumerate(scenarios):
-        if s_idx > 0:
-            lines.append(r"\midrule")
-
-        sc_df = df[df["scenario_label"] == scenario]
+    def _emit_sub_groups(sub_df, prefix_col_fn):
+        """Emit rows for one block of (doses, dilution, error_nl) sub-groups."""
         seen = {}
-        for _, row in sc_df.iterrows():
+        for _, row in sub_df.iterrows():
             key = (row["doses"], row["dilution"], row["error_nl"])
             seen[key] = None
         sub_groups = list(seen.keys())
@@ -705,43 +753,70 @@ def _write_dr_overview_table(
                 lines.append(cmidrule)
 
             for ri, rep in enumerate(replicates_list):
-                scenario_cell = scenario if (sg_idx == 0 and ri == 0) else ""
-                doses_cell    = str(int(doses)) if ri == 0 else ""
-                dil_cell      = str(int(dil))   if ri == 0 else ""
-                enl_cell      = str(enl)        if ri == 0 else ""
-                rep_cell      = str(int(rep))
+                prefix_cells = prefix_col_fn(sg_idx, ri, doses, dil, enl)
+                rep_cell     = str(int(rep))
 
-                sub = df[
-                    (df["scenario_label"] == scenario)
-                    & (df["doses"]       == doses)
-                    & (df["dilution"]    == dil)
-                    & (df["error_nl"]    == enl)
-                    & (df["replicates"]  == rep)
+                sub = sub_df[
+                    (sub_df["doses"]      == doses)
+                    & (sub_df["dilution"] == dil)
+                    & (sub_df["error_nl"] == enl)
+                    & (sub_df["replicates"] == rep)
                 ]
-                lay_vals  = {lay: sub[sub["layout"] == lay]["value"].dropna().tolist()
-                             for lay in layouts}
-                lay_means = {lay: float(np.nanmean(v)) if v else float("nan")
-                             for lay, v in lay_vals.items()}
+                lay_vals  = {
+                    lay: sub[sub["layout"] == lay]["value"].dropna().tolist()
+                    for lay in layouts
+                }
+                lay_means = {
+                    lay: float(np.nanmean(v)) if v else float("nan")
+                    for lay, v in lay_vals.items()
+                }
 
                 valid = [m for m in lay_means.values() if not np.isnan(m)]
                 best  = (min(valid) if bold_min else max(valid)) if valid else float("nan")
 
-                row = [scenario_cell, doses_cell, dil_cell, enl_cell, rep_cell]
+                row_cells = list(prefix_cells) + [rep_cell]
                 for lay in layouts:
                     m = lay_means[lay]
                     if np.isnan(m):
                         cell = "--"
                     else:
                         val_str = f"{m:.4f}"
-                        cell = rf"\textbf{{{val_str}}}" if m == best else val_str
+                        cell    = rf"\textbf{{{val_str}}}" if m == best else val_str
                         if lay == "COMPD":
                             cell += _sig_flag(
                                 lay_vals.get("PLAID", []),
                                 lay_vals.get("COMPD", []),
                             )
-                    row.append(cell)
+                    row_cells.append(cell)
 
-                lines.append(" & ".join(row) + r" \\")
+                lines.append(" & ".join(row_cells) + r" \\")
+
+    if show_scenario_col:
+        scenarios = list(dict.fromkeys(df["scenario_label"]))
+        for s_idx, scenario in enumerate(scenarios):
+            if s_idx > 0:
+                lines.append(r"\midrule")
+            sc_df = df[df["scenario_label"] == scenario]
+
+            def prefix_col_fn(sg_idx, ri, doses, dil, enl,
+                              _s=scenario):  # capture scenario
+                return [
+                    _s if (sg_idx == 0 and ri == 0) else "",
+                    str(int(doses)) if ri == 0 else "",
+                    str(int(dil))   if ri == 0 else "",
+                    str(enl)        if ri == 0 else "",
+                ]
+
+            _emit_sub_groups(sc_df, prefix_col_fn)
+    else:
+        def prefix_col_fn(sg_idx, ri, doses, dil, enl):
+            return [
+                str(int(doses)) if ri == 0 else "",
+                str(int(dil))   if ri == 0 else "",
+                str(enl)        if ri == 0 else "",
+            ]
+
+        _emit_sub_groups(df, prefix_col_fn)
 
     lines += [r"\bottomrule", r"\end{tabular}"]
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -750,13 +825,26 @@ def _write_dr_overview_table(
 
 
 def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
-    """Generate compact DR overview tables for residuals, relative IC50, and
-    absolute IC50.
+    """Generate compact DR overview tables — one file per scenario per metric.
 
-    Three files are written to cfg.latex_tables_dir:
-      dr-overview-residuals.tex
-      dr-overview-rel-ic50.tex
-      dr-overview-abs-ic50.tex
+    Nine files are written to cfg.latex_tables_dir:
+
+      dr-overview-residuals-bowl.tex       (bowl, neg unaffected)
+      dr-overview-residuals-bowl-neg.tex   (bowl, neg affected)
+      dr-overview-residuals-column.tex     (half-plate column)
+      dr-overview-rel-ic50-bowl.tex
+      dr-overview-rel-ic50-bowl-neg.tex
+      dr-overview-rel-ic50-column.tex
+      dr-overview-abs-ic50-bowl.tex
+      dr-overview-abs-ic50-bowl-neg.tex
+      dr-overview-abs-ic50-column.tex
+
+    Each file contains one LaTeX tabular sized to fit on a single page:
+    rows are (doses x dilution x error_nl x replicate), columns are layouts.
+    The scenario name is not a column — it belongs in the LaTeX caption.
+
+    The old three-file output (dr-overview-*.tex without scenario suffix) is
+    no longer written; update \\input{} calls in 0_supplement.tex accordingly.
     """
     layouts = [
         spec.display_type
@@ -765,17 +853,34 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
     d = cfg.latex_tables_dir
     d.mkdir(parents=True, exist_ok=True)
 
-    for prefix, fname, bold_min in [
-        ("residuals", "dr-overview-residuals.tex",  True),
-        ("relic50",   "dr-overview-rel-ic50.tex",   True),
-        ("absic50",   "dr-overview-abs-ic50.tex",   True),
+    scenario_suffixes = {
+        "curve_info-new-reg":                 "bowl",
+        "bowl-neg-control-new-reg":           "bowl-neg",
+        "right-half-neg-control-log-new-reg": "column",
+    }
+
+    for prefix, metric_stem, bold_min in [
+        ("residuals", "dr-overview-residuals", True),
+        ("relic50",   "dr-overview-rel-ic50",  True),
+        ("absic50",   "dr-overview-abs-ic50",  True),
     ]:
-        print(f"\nBuilding {fname} ...")
-        df = _build_dr_overview_df(cfg, prefix)
-        if df.empty:
-            print(f"  WARNING: no data found for {prefix} — skipping")
-            continue
-        _write_dr_overview_table(df, layouts, path=d / fname, bold_min=bold_min)
+        for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
+            suffix = scenario_suffixes[id_text]
+            fname  = f"{metric_stem}-{suffix}.tex"
+            print(f"\nBuilding {fname} ...")
+
+            df = _build_dr_overview_df_for_scenario(cfg, prefix, id_text, error_nls)
+            if df.empty:
+                print(f"  WARNING: no data for {prefix}/{id_text} — skipping")
+                continue
+
+            _write_dr_overview_table(
+                df,
+                layouts,
+                path=d / fname,
+                bold_min=bold_min,
+                show_scenario_col=False,
+            )
 
 
 # -----------------------------------------------------------------------

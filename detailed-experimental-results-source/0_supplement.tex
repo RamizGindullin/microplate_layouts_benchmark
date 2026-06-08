@@ -75,15 +75,33 @@ Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild
 
 \begin{table}[!h]
   \caption{%
-    Relative IC50/EC50 MSE overview across all dose-response scenarios.
-    Each cell shows the mean value for the given layout; the best (lowest)
-    value per row is \textbf{bolded}.
+    Relative IC50/EC50 MSE overview for bowl-shaped effects with unaffected
+    negative controls. Best (lowest) value per row is \textbf{bolded}.
     Superscripts $^{*}$/$^{**}$/$^{***}$ indicate COMPD\,vs.\,PLAID
     Welch $t$-test significance at $p{<}0.05/0.01/0.001$.
   }
-  \label{tab:dr-relic50-overview}
+  \label{tab:dr-relic50-overview-bowl}
   \centering
-  \input{tables/dr-overview-rel-ic50}
+  \input{tables/dr-overview-rel-ic50-bowl}
+\end{table}
+
+\begin{table}[!h]
+  \caption{%
+    Relative IC50/EC50 MSE overview for bowl-shaped effects with affected
+    negative controls.
+  }
+  \label{tab:dr-relic50-overview-bowl-neg}
+  \centering
+  \input{tables/dr-overview-rel-ic50-bowl-neg}
+\end{table}
+
+\begin{table}[!h]
+  \caption{%
+    Relative IC50/EC50 MSE overview for half-plate column effects.
+  }
+  \label{tab:dr-relic50-overview-column}
+  \centering
+  \input{tables/dr-overview-rel-ic50-column}
 \end{table}
 
 \input{tikz-figures/dose_response_relic50_bowl_no_neg}
@@ -95,14 +113,24 @@ Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild
 %%------------------------------------------------------------
 
 \begin{table}[!h]
-  \caption{%
-    Absolute IC50/EC50 MSE overview across all dose-response scenarios.
-    Best (lowest) value per row is \textbf{bolded}.
-    Superscripts as above.
-  }
-  \label{tab:dr-absic50-overview}
+  \caption{Absolute IC50/EC50 MSE overview for bowl-shaped effects with unaffected negative controls.}
+  \label{tab:dr-absic50-overview-bowl}
   \centering
-  \input{tables/dr-overview-abs-ic50}
+  \input{tables/dr-overview-abs-ic50-bowl}
+\end{table}
+
+\begin{table}[!h]
+  \caption{Absolute IC50/EC50 MSE overview for bowl-shaped effects with affected negative controls.}
+  \label{tab:dr-absic50-overview-bowl-neg}
+  \centering
+  \input{tables/dr-overview-abs-ic50-bowl-neg}
+\end{table}
+
+\begin{table}[!h]
+  \caption{Absolute IC50/EC50 MSE overview for half-plate column effects.}
+  \label{tab:dr-absic50-overview-column}
+  \centering
+  \input{tables/dr-overview-abs-ic50-column}
 \end{table}
 
 \input{tikz-figures/dose_response_absic50_bowl_no_neg}
@@ -114,14 +142,24 @@ Figures~\ref{fig:screening}  and Figures~\ref{fig:screening-data-collection-mild
 %%------------------------------------------------------------
 \clearpage
 \begin{table}[!h]
-  \caption{%
-    Residual MSE overview across all dose-response scenarios.
-    Best (lowest) value per row is \textbf{bolded}.
-    Superscripts as above.
-  }
-  \label{tab:dr-residuals-overview}
+  \caption{Residual MSE overview for bowl-shaped effects with unaffected negative controls.}
+  \label{tab:dr-residuals-overview-bowl}
   \centering
-  \input{tables/dr-overview-residuals}
+  \input{tables/dr-overview-residuals-bowl}
+\end{table}
+
+\begin{table}[!h]
+  \caption{Residual MSE overview for bowl-shaped effects with affected negative controls.}
+  \label{tab:dr-residuals-overview-bowl-neg}
+  \centering
+  \input{tables/dr-overview-residuals-bowl-neg}
+\end{table}
+
+\begin{table}[!h]
+  \caption{Residual MSE overview for half-plate column effects.}
+  \label{tab:dr-residuals-overview-column}
+  \centering
+  \input{tables/dr-overview-residuals-column}
 \end{table}
 
 \input{tikz-figures/dose_response_residuals_bowl_no_neg}

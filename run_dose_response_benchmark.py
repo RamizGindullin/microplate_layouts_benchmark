@@ -37,6 +37,7 @@ from benchmark_common import (
     BOWL_ERROR_LEVELS,
     DOSE_RESPONSE_FIGURE_CASES,
     DOSE_RESPONSE_LAYOUT_SPECS,
+    DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER,
     RIGHT_HALF_ERROR_LEVELS,
     dose_response_curve_examples,
     dose_response_plate_types,
@@ -477,10 +478,7 @@ def _write_dr_table_pair(
     df[value_col] = pd.to_numeric(df[value_col], errors="coerce")
     df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=[value_col])
 
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
+    layouts = DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER
     pairs = [
         (layouts[i], layouts[j])
         for i in range(len(layouts))
@@ -601,10 +599,7 @@ def _build_dr_overview_df_for_scenario(
     csv_prefix    = data_prefix_map[prefix]
     value_col     = value_col_map[prefix]
     scenario_label = LABEL_MAP[id_text]
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
+    layouts = DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER
 
     rows = []
     for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
@@ -846,10 +841,7 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
     The old three-file output (dr-overview-*.tex without scenario suffix) is
     no longer written; update \\input{} calls in 0_supplement.tex accordingly.
     """
-    layouts = [
-        spec.display_type
-        for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=lambda s: s.plot_order)
-    ]
+    layouts = DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER
     d = cfg.latex_tables_dir
     d.mkdir(parents=True, exist_ok=True)
 

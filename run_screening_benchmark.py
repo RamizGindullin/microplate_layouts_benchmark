@@ -43,6 +43,8 @@ from benchmark_common import (
     screening_plate_types,
     validate_layout_registry_consistency,
 )
+from benchmark_disturbances import screening_disturbances
+
 validate_layout_registry_consistency()
 
 SCREENING_PANEL_CASES = [
@@ -143,13 +145,17 @@ class ScreeningConfig:
     def error_types(self) -> List[Dict[str, Any]]:
         """Disturbance types for the screening simulation.
 
+        Derived from the disturbance registry (benchmark_disturbances.py).
         Normalisation is per-layout, not per-disturbance: each PlateType carries
-        its own error_correction callable (from benchmark_common.SCREENING_LAYOUT_SPECS
-        via _resolved_error_correction). Adding error_correction here would be dead
-        code — the simulation loop calls plate_type.error_correction(...), never
-        et["error_correction"].
+        its own error_correction callable. Adding error_correction here would be
+        dead code — the simulation loop calls plate_type.error_correction(...).
         """
-        return [{"type": "bowl-nl", "error_function": dt.add_bowlshaped_errors_nl}]
+        import libraries.disturbances as dt
+        _fn_map = {"bowl-nl": dt.add_bowlshaped_errors_nl}
+        return [
+            {"type": d.screening_type, "error_function": _fn_map[d.screening_type]}
+            for d in screening_disturbances()
+        ]
 
     id_text: str = "ROC-supplement"
     metrics_id_text: str = "reviewing"
@@ -528,7 +534,7 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     neg_stdev = 3
     pos_stdev = 4
 
-    error_types = [{"type": "bowl-nl", "error_function": dt.add_bowlshaped_errors_nl}]
+    error_types = cfg.error_types()
     data_directory = str(cfg.metrics_data_dir) + os.sep
 
     for neg_controls, pos_controls in cfg.neg_pos_controls_list:

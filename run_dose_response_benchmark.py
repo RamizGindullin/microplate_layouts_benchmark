@@ -45,6 +45,14 @@ from benchmark_common import (
     fig_dir_str,
     validate_layout_registry_consistency,
 )
+from benchmark_disturbances import (
+    DISTURBANCES,
+    dr_scenarios,
+    DR_LABEL_BY_ID,
+    DR_FILE_SUFFIX_BY_ID,
+    DR_STEM_LABEL_BY_ID,
+)
+import libraries.disturbances as _dt_for_registry
 
 validate_layout_registry_consistency()
 
@@ -109,6 +117,54 @@ class DoseResponseScenario:
 
 _DR_CORRECTION = nrm.normalize_plate_nearest_control
 
+def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
+    """
+    Build the canonical list of DoseResponseScenario objects from the
+    disturbance registry + benchmark_common error-level constants.
+
+    This function is the single place that maps:
+        registry dr_id_text  →  error_function + error_types dict structure
+
+    The error_nl values come from benchmark_common (BOWL_ERROR_LEVELS,
+    RIGHT_HALF_ERROR_LEVELS); the function callables are resolved by the
+    registry helper. Behaviour is identical to the previous hardcoded list.
+    """
+    import libraries.disturbances as dt  # noqa: PLC0415
+
+    _ERROR_LEVELS_BY_ID = {
+        "curve_info-new-reg":                 BOWL_ERROR_LEVELS,
+        "bowl-neg-control-new-reg":           BOWL_ERROR_LEVELS,
+        "right-half-neg-control-log-new-reg": RIGHT_HALF_ERROR_LEVELS,
+    }
+    _ERROR_TYPE_BY_ID = {
+        "curve_info-new-reg":                 "bowl-nl",
+        "bowl-neg-control-new-reg":           "bowl-nl",
+        "right-half-neg-control-log-new-reg": "right-half",
+    }
+    _FUNCTION_BY_ID = {
+        "curve_info-new-reg":                 dt.add_bowlshaped_errors_nl,
+        "bowl-neg-control-new-reg":           dt.add_bowlshaped_errors_nl,
+        "right-half-neg-control-log-new-reg": dt.add_errors_to_right_columns_half,
+    }
+
+    scenarios = []
+    for d in dr_scenarios():
+        id_text = d.dr_id_text
+        for error_nl in _ERROR_LEVELS_BY_ID[id_text]:
+            scenarios.append(
+                DoseResponseScenario(
+                    id_text=id_text,
+                    error_nl=error_nl,
+                    error_types=[{
+                        "type":             _ERROR_TYPE_BY_ID[id_text],
+                        "error_function":   _FUNCTION_BY_ID[id_text],
+                        "error_correction": _DR_CORRECTION,
+                        "error":            error_nl,
+                    }],
+                )
+            )
+    return scenarios
+
 @dataclass
 class DoseResponseConfig:
     base_dir: Path = field(default_factory=lambda: Path("."))
@@ -132,73 +188,7 @@ class DoseResponseConfig:
     date_tag: str = "20250706-"
 
     scenarios: List[DoseResponseScenario] = field(
-        default_factory=lambda: [
-            DoseResponseScenario(
-                id_text="right-half-neg-control-log-new-reg",
-                error_nl=0.2,
-                error_types=[{
-                    "type": "right-half",
-                    "error_function": dt.add_errors_to_right_columns_half,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.2,
-                }]
-            ),
-            # NOTE: scenario with id_text="log-neg-control-new-reg" and
-            # label="half-columns-neg-controls-0.4-log" was removed — it was a
-            # duplicate of the scenario below (same id_text after correction, same
-            # error_nl=0.4, same CSV output), and its label was never used in any
-            # figure-generation call.
-            DoseResponseScenario(
-                id_text="right-half-neg-control-log-new-reg",
-                error_nl=0.4,
-                error_types=[{
-                    "type": "right-half",
-                    "error_function": dt.add_errors_to_right_columns_half,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.4,
-                }]
-            ),
-            DoseResponseScenario(
-                id_text="curve_info-new-reg",
-                error_nl=0.055,
-                error_types=[{
-                    "type": "bowl-nl",
-                    "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.055,
-                }]
-            ),
-            DoseResponseScenario(
-                id_text="bowl-neg-control-new-reg",
-                error_nl=0.055,
-                error_types=[{
-                    "type": "bowl-nl",
-                    "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.055,
-                }]
-            ),
-            DoseResponseScenario(
-                id_text="curve_info-new-reg",
-                error_nl=0.085,
-                error_types=[{
-                    "type": "bowl-nl",
-                    "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.085,
-                }]
-            ),
-            DoseResponseScenario(
-                id_text="bowl-neg-control-new-reg",
-                error_nl=0.085,
-                error_types=[{
-                    "type": "bowl-nl",
-                    "error_function": dt.add_bowlshaped_errors_nl,
-                    "error_correction": _DR_CORRECTION,
-                    "error": 0.085,
-                }]
-            ),
-        ]
+        default_factory=_build_default_dr_scenarios
     )
 
     def plate_types_location(
@@ -524,11 +514,7 @@ def generate_dr_full_latex_tables(cfg: "DoseResponseConfig") -> None:
     d = cfg.latex_tables_dir
 
     # Map scenario id_text → short label for filenames (must match b_table_stats.tex)
-    LABEL_MAP = {
-        "curve_info-new-reg":                    "bowl",
-        "bowl-neg-control-new-reg":              "bowl-neg-controls",
-        "right-half-neg-control-log-new-reg":    "half-columns-neg-controls",
-    }
+    LABEL_MAP = DR_STEM_LABEL_BY_ID
 
     for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
         label = LABEL_MAP[id_text]
@@ -590,15 +576,10 @@ def _build_dr_overview_df_for_scenario(
         "relic50":   "MSE",
         "absic50":   "MSE",
     }
-    LABEL_MAP = {
-        "curve_info-new-reg":                 "bowl (neg unaffected)",
-        "bowl-neg-control-new-reg":           "bowl (neg affected)",
-        "right-half-neg-control-log-new-reg": "column (half-plate)",
-    }
-
+    
     csv_prefix    = data_prefix_map[prefix]
     value_col     = value_col_map[prefix]
-    scenario_label = LABEL_MAP[id_text]
+    scenario_label = DR_LABEL_BY_ID[id_text]
     layouts = DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER
 
     rows = []
@@ -652,16 +633,11 @@ def _build_dr_overview_df(
     adds a 'scenario_label' column.  Existing code that calls this function
     directly is unaffected.
     """
-    LABEL_MAP = {
-        "curve_info-new-reg":                 "bowl (neg unaffected)",
-        "bowl-neg-control-new-reg":           "bowl (neg affected)",
-        "right-half-neg-control-log-new-reg": "column (half-plate)",
-    }
     frames = []
     for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
         df = _build_dr_overview_df_for_scenario(cfg, prefix, id_text, error_nls)
         if not df.empty:
-            df.insert(0, "scenario_label", LABEL_MAP[id_text])
+            df.insert(0, "scenario_label", DR_LABEL_BY_ID[id_text])
             frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
@@ -686,7 +662,7 @@ def _write_dr_overview_table(
                           belongs in the LaTeX caption instead.
 
     Row structure when show_scenario_col=False:
-      Top-level groups: (doses, dilution, error_nl).  A \cmidrule separates
+      Top-level groups: (doses, dilution, error_nl).  A \\cmidrule separates
       groups.  Within each group: one row per replicate count (1, 2, 3).
 
     Row structure when show_scenario_col=True (original behaviour):
@@ -845,19 +821,13 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
     d = cfg.latex_tables_dir
     d.mkdir(parents=True, exist_ok=True)
 
-    scenario_suffixes = {
-        "curve_info-new-reg":                 "bowl",
-        "bowl-neg-control-new-reg":           "bowl-neg",
-        "right-half-neg-control-log-new-reg": "column",
-    }
-
     for prefix, metric_stem, bold_min in [
         ("residuals", "dr-overview-residuals", True),
         ("relic50",   "dr-overview-rel-ic50",  True),
         ("absic50",   "dr-overview-abs-ic50",  True),
     ]:
         for id_text, error_nls, _fig_fn, _r2_fn in IC50_DMAX_R2_SCENARIO_GROUPS:
-            suffix = scenario_suffixes[id_text]
+            suffix = DR_FILE_SUFFIX_BY_ID[id_text]
             fname  = f"{metric_stem}-{suffix}.tex"
             print(f"\nBuilding {fname} ...")
 

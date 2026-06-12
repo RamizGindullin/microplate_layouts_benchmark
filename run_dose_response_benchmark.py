@@ -881,89 +881,6 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
             )
 
 
-def _dr_col_width(n_cols: int) -> str:
-    """Subfigure width for N data columns beside the 0.05 label column.
-
-    Replicates the exact 0.4 used in the existing wrappers for n_cols=2.
-    For other widths: floor((0.8 / n_cols) * 100) / 100, 2 d.p.
-    """
-    if n_cols == 2:
-        return "0.4"
-    w = int((0.8 / n_cols) * 100) / 100.0
-    return f"{w:.2f}"
-
-
-def _dr_figure_block(
-    *,
-    fig_root: "Path",
-    metric_key: str,
-    filenames_by_row: "List[Tuple[str, List[str]]]",
-    col_labels: "List[str]",
-    caption: str,
-) -> "List[str]":
-    """
-    Produce the lines for one figure* environment.
-
-    Parameters
-    ----------
-    fig_root         : absolute path used for exists() checks only
-    metric_key       : one of the keys in _DR_CAPTIONS / _DR_SUBSUBSECTION
-    filenames_by_row : list of (row_label, [png_basename, ...]) in dose order
-    col_labels       : column header strings (length == len(filenames_by_row[0][1]))
-    caption          : already-formatted caption string
-    """
-    n_cols  = len(col_labels)
-    col_w   = _dr_col_width(n_cols)
-    lines   = []
-
-    def _subfig(width: str, content: str, center: bool = False) -> "List[str]":
-        out = [rf"  \begin{{subfigure}}[c]{{{width}\textwidth}}"]
-        if center:
-            out.append(r"    \centering")
-        out.append(f"    {content}")
-        out.append(r"  \end{subfigure}")
-        return out
-
-    lines += [r"\begin{figure*}[!htbp]", r"  \centering"]
-
-    # Header row: blank label + column headers
-    lines += _subfig(f"0.05", "~")
-    lines.append("  %")
-    for i, col_lbl in enumerate(col_labels):
-        lines += _subfig(f"{col_w}", rf"~~\textbf{{{col_lbl}}}", center=True)
-        if i < n_cols - 1:
-            lines.append("  %")
-
-    # Data rows: one per dose count
-    for row_label, png_names in filenames_by_row:
-        lines.append("")
-        # Rotated dose label
-        lines += [
-            rf"  \begin{{subfigure}}[c]{{0.05\textwidth}}",
-            r"    \begin{tikzpicture}",
-            rf"      \node[rotate=90] {{\textbf{{{row_label}}}}};",
-            r"    \end{tikzpicture}",
-            r"  \end{subfigure}",
-        ]
-        lines.append("  %")
-        for i, png in enumerate(png_names):
-            full = fig_root / png
-            if full.exists():
-                img_line = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"
-            else:
-                img_line = f"% MISSING: figures/{png}"
-            lines += _subfig(f"{col_w}", img_line, center=(i > 0))
-            if i < n_cols - 1:
-                lines.append("  %")
-
-    lines += [
-        "",
-        rf"  \caption{{{caption}}}",
-        r"\end{figure*}",
-    ]
-    return lines
-
-
 def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
     """Write tikz-figures/dr_section_auto.tex.
 
@@ -1077,7 +994,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             lambda d, dil, enl, _fn=ic50_fn: f"dose-response-d_diff{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["d_diff"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
-        lines += _dr_figure_block(
+        lines += util.latex_figure_block(
             fig_root=fig_root,
             metric_key="d_diff",
             filenames_by_row=rows,
@@ -1091,7 +1008,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             lambda d, dil, enl, _fn=ic50_fn: f"dose-response-relic50{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["relic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
-        lines += _dr_figure_block(
+        lines += util.latex_figure_block(
             fig_root=fig_root, metric_key="relic50",
             filenames_by_row=rows, col_labels=col_labels, caption=cap,
         )
@@ -1103,7 +1020,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             lambda d, dil, enl, _fn=ic50_fn: f"dose-response-absic50{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["absic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
-        lines += _dr_figure_block(
+        lines += util.latex_figure_block(
             fig_root=fig_root, metric_key="absic50",
             filenames_by_row=rows, col_labels=col_labels, caption=cap,
         )
@@ -1115,7 +1032,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             lambda d, dil, enl, _fn=res_fn: f"{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["residuals"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
-        lines += _dr_figure_block(
+        lines += util.latex_figure_block(
             fig_root=fig_root, metric_key="residuals",
             filenames_by_row=rows, col_labels=col_labels, caption=cap,
         )
@@ -1128,7 +1045,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
                 lambda d, dil, enl, _fn=r2_fn: f"percentage-low-r2{_fn(d, dil, enl)}.png"
             )
             cap = _DR_CAPTIONS["percentage"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
-            lines += _dr_figure_block(
+            lines += util.latex_figure_block(
                 fig_root=fig_root, metric_key="percentage",
                 filenames_by_row=rows, col_labels=col_labels, caption=cap,
             )

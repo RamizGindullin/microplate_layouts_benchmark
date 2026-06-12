@@ -149,6 +149,14 @@ _METRIC_CURVEDESC = {
     "roc": r"ROC curves (mean $\pm$ 1\,s.d.\ across batches)",
     "pr":  r"Precision-recall curves (mean $\pm$ 1\,s.d.\ across batches)",
 }
+
+# Error levels shown in SSMD/Z'-factor supplement figures.
+# These match the manual wrappers screening_data_ssmd.tex and
+# screening_data_z_factor.tex (errors 0.0 – 0.08 in steps of 0.01).
+# The metrics simulation sweeps 0–0.25, but the supplement shows only this prefix.
+_METRICS_DISPLAY_ERRORS: List[float] = [i / 100.0 for i in range(9)]  # 0.0 … 0.08
+_METRICS_DISPLAY_CONTROLS: Tuple[int, int] = (10, 10)  # (neg, pos) shown in supplement
+
 _CTRL_LABEL = {
     (8, 8):   "8 positive and 8 negative controls",
     (10, 10): "10 positive and 10 negative controls",
@@ -1023,28 +1031,32 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                 continue
             neg, pos = level.panel_neg_pos
             label    = f"fig:screening-data-{level.label}"
+            layout_enum = ", ".join(
+                spec.display_type for spec in SCREENING_LAYOUT_SPECS
+            )
             cap = (
                 rf"Expected versus obtained screening results for "
                 rf"\emph{{{emph}}} plate effects ({level.label} strength, "
                 rf"{pos}\,--\,{neg} controls). "
-                rf"Panels show Random, PLAID, and COMPD layouts "
+                rf"Panels show {layout_enum} layouts "
                 rf"after error correction and normalisation, "
                 rf"with 1\% hit rate and 1~replicate per compound."
             )
 
             lines.append(r"\begin{figure*}[!htb]")
             lines.append(r"  \centering")
-            for i, layout_key in enumerate(["random", "plaid", "compd"]):
-                png = f"screening-bowl-{level.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4-{layout_key}.png"
+            layout_display_names = [spec.display_type for spec in SCREENING_LAYOUT_SPECS]
+            
+            for i, spec in enumerate(SCREENING_LAYOUT_SPECS):
+                png = f"screening-bowl-{level.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4-{spec.key}.png"
                 if _fig_exists(png):
                     inc = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"
                 else:
                     inc = f"% MISSING: figures/{png}"
-                label_cap = {"random": "Random", "plaid": "PLAID", "compd": "COMPD"}.get(layout_key, layout_key.capitalize())
                 lines += [
                     rf"  \begin{{subfigure}}[b]{{0.31\textwidth}}",
                     r"    \centering",
-                    rf"    \caption{{{label_cap}}}",
+                    rf"    \caption{{{spec.display_type}}}",
                     f"    {inc}",
                     r"  \end{subfigure}",
                 ]
@@ -1185,6 +1197,61 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                 else:
                     lines.append(f"  % MISSING: tables/{stem}.tex")
                 lines += [r"\end{table*}", ""]
+
+        lines.append(r"\clearpage")
+        
+        # ── 2.x.5  SSMD and Z'-factor metrics ───────────────────────────
+        # One 9-panel figure per metric (SSMD, Z'-factor).
+        # Replicates the layout of screening_data_ssmd.tex and
+        # screening_data_z_factor.tex: 3 rows × 3 cols, each 0.3\textwidth.
+        # Only the 10-10 control configuration is shown (matches the wrappers).
+        # Filename pattern written by util.plotting_residual_metrics:
+        #   figures/screening-{metric}-mse-{csv_basename}.png
+        lines += [r"\subsubsection{SSMD and Z$'$-factor metrics}", ""]
+
+        neg_m, pos_m = _METRICS_DISPLAY_CONTROLS
+        ctrl_desc_m = _CTRL_LABEL.get((neg_m, pos_m), f"{pos_m} -- {neg_m} controls")
+
+        for metric_key, metric_tex in [("SSMD", "SSMD"), ("Zfactor", "Z$'$-factor")]:
+            label = f"fig:screening-{metric_key.lower()}-{pos_m}-{neg_m}"
+            cap = (
+                rf"Comparison of MSE when calculating the {metric_tex} of plates "
+                rf"for \emph{{{emph}}} plate effects "
+                rf"using {ctrl_desc_m} on a 384-well plate with 1~replicate, "
+                rf"1\%~hit-rate and varying strengths of bowl-shaped plate effects. "
+                rf"$^{{*}}p{{<}}0.05$, $^{{**}}p{{<}}0.01$, $^{{***}}p{{<}}0.001$."
+            )
+
+            lines.append(r"\begin{figure*}[!htb]")
+            lines.append(r"  \centering")
+
+            errors = _METRICS_DISPLAY_ERRORS  # 9 items, 3×3 grid
+            for i, error in enumerate(errors):
+                csv_basename = (
+                    f"screening_metrics_data-{pos_m}-{neg_m}-{error:.2f}"
+                    f"-{cfg.metrics_date_tag}-{cfg.metrics_id_text}.csv"
+                )
+                png = f"screening-{metric_key}-mse-{csv_basename}.png"
+                sub_cap = "No plate effect" if error == 0.0 else str(i)
+                lines += [
+                    rf"  \begin{{subfigure}}[b]{{0.3\textwidth}}",
+                    r"    \centering",
+                    rf"    \caption{{{sub_cap}}}",
+                    rf"    \includegraphics[width=\textwidth]{{figures/{png}}}" if _fig_exists(png) else f"    % MISSING: figures/{png}",
+                    r"  \end{subfigure}",
+                ]
+                # \hfill after cols 1 and 2 of each row (not after col 3)
+                if i % 3 < 2:
+                    lines.append(r"  \hfill")
+                elif i % 3 == 2 and i < len(errors) - 1:
+                    lines.append("")  # blank line between rows
+
+            lines += [
+                rf"  \caption{{{cap}}}",
+                rf"  \label{{{label}}}",
+                r"\end{figure*}",
+                "",
+            ]
 
         lines.append(r"\clearpage")
 

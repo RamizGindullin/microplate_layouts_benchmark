@@ -1049,12 +1049,13 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             
             for i, spec in enumerate(SCREENING_LAYOUT_SPECS):
                 png = f"screening-bowl-{level.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4-{spec.key}.png"
+                n_cols = len(SCREENING_LAYOUT_SPECS)
                 if _fig_exists(png):
                     inc = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"
                 else:
                     inc = f"% MISSING: figures/{png}"
                 lines += [
-                    rf"  \begin{{subfigure}}[b]{{0.31\textwidth}}",
+                    rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(n_cols)}\textwidth}}",
                     r"    \centering",
                     rf"    \caption{{{spec.display_type}}}",
                     f"    {inc}",
@@ -1100,7 +1101,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
                         png = f"ROC-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
-                            rf"  \begin{{subfigure}}[b]{{0.49\textwidth}}",
+                            rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
                             rf"    \includegraphics[width=\textwidth]{{figures/{png}}}" if _fig_exists(png) else f"    % MISSING: figures/{png}",
                             rf"    \caption{{{hr}\% hits}}",
@@ -1146,7 +1147,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
                         png = f"PR-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
-                            rf"  \begin{{subfigure}}[b]{{0.49\textwidth}}",
+                            rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
                             rf"    \includegraphics[width=\textwidth]{{figures/{png}}}" if _fig_exists(png) else f"    % MISSING: figures/{png}",
                             rf"    \caption{{{hr}\% hits}}",
@@ -1228,7 +1229,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             errors = _METRICS_DISPLAY_ERRORS  # 9 items, 3×3 grid
             for i, error in enumerate(errors):
                 csv_basename = (
-                    f"screening_metrics_data-{pos_m}-{neg_m}-{error:.2f}"
+                    f"screening_metrics_data-{pos_m}-{neg_m}-{error}"
                     f"-{cfg.metrics_date_tag}-{cfg.metrics_id_text}.csv"
                 )
                 png = f"screening-{metric_key}-mse-{csv_basename}.png"

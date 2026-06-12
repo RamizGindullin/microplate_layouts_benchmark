@@ -230,6 +230,113 @@ def fmt_pvalue_sci(pval: float) -> str:
 
 
 # ---------------------------------------------------------------------------
+# LaTeX figure-block helpers  (shared by DR and screening section generators)
+# ---------------------------------------------------------------------------
+
+def subfigure_col_width(n_cols: int) -> str:
+    """Subfigure width string for *n_cols* data columns beside a 0.05 label column.
+
+    The available budget is 0.80\\textwidth (the remaining 0.20 is consumed
+    by the label column and inter-panel spacing).  For the canonical two-column
+    case the exact legacy value 0.4 is returned so existing wrappers are
+    matched precisely.  For other column counts the width is floor-rounded to
+    two decimal places so panels never overflow the text area.
+
+    Examples::
+
+        subfigure_col_width(2)  →  "0.40"
+        subfigure_col_width(3)  →  "0.26"
+        subfigure_col_width(4)  →  "0.20"
+    """
+    if n_cols == 2:
+        return "0.40"
+    w = int((0.80 / n_cols) * 100) / 100.0
+    return f"{w:.2f}"
+
+
+def latex_figure_block(
+    *,
+    fig_root: "Path",
+    filenames_by_row: "list[tuple[str, list[str]]]",
+    col_labels: "list[str]",
+    caption: str,
+    fig_subdir: str = "figures",
+) -> "list[str]":
+    """Return the lines for one ``figure*`` environment.
+
+    Layout::
+
+        [0.05 label] [col_w panel] ... [col_w panel]   ← header row
+        [0.05 rotated row-label] [panel] ... [panel]   ← one row per entry
+
+    Parameters
+    ----------
+    fig_root :
+        Directory used for ``Path.exists()`` checks only — not written into
+        the LaTeX output.
+    filenames_by_row :
+        ``[(row_label, [png_basename, ...]), ...]`` in display order.
+        All inner lists must have the same length as *col_labels*.
+    col_labels :
+        Column header strings; length determines the number of panels per row.
+    caption :
+        Already-formatted caption string inserted into ``\\caption{}``.
+    fig_subdir :
+        Relative path prefix used in ``\\includegraphics``.  Defaults to
+        ``"figures"``; override to ``"figures/screening"`` etc. if needed.
+    """
+    n_cols = len(col_labels)
+    col_w  = subfigure_col_width(n_cols)
+    lines  = []
+
+    def _subfig(width: str, content: str, center: bool = False) -> "list[str]":
+        out = [rf"  \begin{{subfigure}}[c]{{{width}\textwidth}}"]
+        if center:
+            out.append(r"    \centering")
+        out.append(f"    {content}")
+        out.append(r"  \end{subfigure}")
+        return out
+
+    lines += [r"\begin{figure*}[!htbp]", r"  \centering"]
+
+    # Header row: blank spacer + column labels
+    lines += _subfig("0.05", "~")
+    lines.append("  %")
+    for i, col_lbl in enumerate(col_labels):
+        lines += _subfig(f"{col_w}", rf"~~\textbf{{{col_lbl}}}", center=True)
+        if i < n_cols - 1:
+            lines.append("  %")
+
+    # Data rows
+    for row_label, png_names in filenames_by_row:
+        lines.append("")
+        lines += [
+            rf"  \begin{{subfigure}}[c]{{0.05\textwidth}}",
+            r"    \begin{tikzpicture}",
+            rf"      \node[rotate=90] {{\textbf{{{row_label}}}}};"  ,
+            r"    \end{tikzpicture}",
+            r"  \end{subfigure}",
+        ]
+        lines.append("  %")
+        for i, png in enumerate(png_names):
+            full = fig_root / png
+            if full.exists():
+                img_line = rf"\includegraphics[width=\textwidth]{{{fig_subdir}/{png}}}"
+            else:
+                img_line = f"% MISSING: {fig_subdir}/{png}"
+            lines += _subfig(f"{col_w}", img_line, center=(i > 0))
+            if i < n_cols - 1:
+                lines.append("  %")
+
+    lines += [
+        "",
+        rf"  \caption{{{caption}}}",
+        r"\end{figure*}",
+    ]
+    return lines
+
+
+# ---------------------------------------------------------------------------
 # Generic LaTeX table writers
 # ---------------------------------------------------------------------------
 

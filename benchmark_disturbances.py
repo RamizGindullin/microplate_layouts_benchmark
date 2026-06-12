@@ -167,9 +167,18 @@ DISTURBANCES: List[DisturbanceScenario] = [
             ErrorLevel(0.085, "strong", col_label="Strong plate effects"),
         ),
         screening_error_levels=(
+            # (10, 10) — primary config, also produces panel figures
             ErrorLevel(0.06, "mild",     panel_neg_pos=(10, 10), panel_fig_label="0.03"),
-            ErrorLevel(0.1,  "moderate", panel_neg_pos=(10, 10),  panel_fig_label="0.06"),
+            ErrorLevel(0.1,  "moderate", panel_neg_pos=(10, 10), panel_fig_label="0.06"),
             ErrorLevel(0.2,  "strong",   panel_neg_pos=(10, 10), panel_fig_label="0.08"),
+            # (8, 8) — ROC/PR only, no panel figures
+            ErrorLevel(0.06, "mild",     panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.1,  "moderate", panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.2,  "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),
+            # (10, 20) — ROC/PR only, no panel figures
+            ErrorLevel(0.06, "mild",     panel_neg_pos=(10, 20), panel_fig_label=None),
+            ErrorLevel(0.1,  "moderate", panel_neg_pos=(10, 20), panel_fig_label=None),
+            ErrorLevel(0.2,  "strong",   panel_neg_pos=(10, 20), panel_fig_label=None),
         ),
     ),
     DisturbanceScenario(

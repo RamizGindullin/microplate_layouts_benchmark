@@ -11,8 +11,8 @@
 
 - benchmark_common.py owns:
     • layout lists (DOSE_RESPONSE_LAYOUT_SPECS, SCREENING_LAYOUT_SPECS)
-    • structural scenario groupings (BOWL_ERROR_LEVELS, RIGHT_HALF_ERROR_LEVELS,
-      DOSE_RESPONSE_FIGURE_CASES, SCREENING_ROC_PR_CASES, etc.)
+    • structural scenario groupings (DOSE_RESPONSE_FIGURE_CASES,
+      SCREENING_ROC_PR_CASES, etc.)
 
 - The benchmark scripts (run_dose_response_benchmark.py,
   run_screening_benchmark.py) own:
@@ -28,7 +28,7 @@ No other file needs to be edited for the disturbance metadata itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def _disturbance_function_for_screening_type(screening_type: str) -> Callable:
 
 def _disturbance_function_for_dr_id(dr_id_text: str) -> Callable:
     """Return the error-function callable for a given dr_id_text string."""
-    import libraries.disturbances as dt  # noqa: PLC0415
+    import libraries.disturbances as dt
     _MAP: Dict[str, Callable] = {
         "curve_info-new-reg":                 dt.add_bowlshaped_errors_nl,
         "bowl-neg-control-new-reg":           dt.add_bowlshaped_errors_nl,
@@ -78,6 +78,32 @@ def _disturbance_function_for_dr_id(dr_id_text: str) -> Callable:
 # ---------------------------------------------------------------------------
 # Dataclass
 # ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ErrorLevel:
+    """One named error-strength level for a pipeline scenario.
+
+    value : numeric error parameter passed to simulation functions
+    label : filename/LaTeX-safe label used in captions and output filenames
+            (e.g. "mild", "strong", "moderate")
+    col_label : LaTeX column header used in generated figures
+                (e.g. "Mild plate effects", "Strong plate effects")
+                Defaults to label.capitalize() if None.
+    dr_error_levels : The list of error levels and their labels for dose-response
+                      experiments
+    screening_error_levels : The list of error levels and their labels for
+                             screening experiments
+    """
+    value: float
+    label: str
+    col_label: Optional[str] = None
+    panel_neg_pos: Optional[Tuple[int, int]] = None  # representative (neg, pos) for panel figures
+    panel_fig_label: Optional[str] = None            # display label used in SCREENING_PANEL_CASES fig_name
+    
+
+    def latex_col_label(self) -> str:
+        return self.col_label if self.col_label is not None else self.label.capitalize()
+
 
 @dataclass(frozen=True)
 class DisturbanceScenario:
@@ -117,6 +143,8 @@ class DisturbanceScenario:
     publish_screening: bool
     dr_file_suffix: Optional[str] = None
     dr_stem_label: Optional[str] = None
+    dr_error_levels:         Optional[Tuple[ErrorLevel, ...]] = None
+    screening_error_levels:  Optional[Tuple[ErrorLevel, ...]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +162,15 @@ DISTURBANCES: List[DisturbanceScenario] = [
         publish_screening=True,
         dr_file_suffix="bowl",
         dr_stem_label="bowl",
+        dr_error_levels=(
+            ErrorLevel(0.055, "mild",   col_label="Mild plate effects"),
+            ErrorLevel(0.085, "strong", col_label="Strong plate effects"),
+        ),
+        screening_error_levels=(
+            ErrorLevel(0.06, "mild",     panel_neg_pos=(10, 10), panel_fig_label="0.03"),
+            ErrorLevel(0.1,  "moderate", panel_neg_pos=(10, 10),  panel_fig_label="0.06"),
+            ErrorLevel(0.2,  "strong",   panel_neg_pos=(10, 10), panel_fig_label="0.08"),
+        ),
     ),
     DisturbanceScenario(
         key="bowl_nl_neg_affected",
@@ -142,9 +179,14 @@ DISTURBANCES: List[DisturbanceScenario] = [
         dr_id_text="bowl-neg-control-new-reg",
         screening_type="bowl-nl",
         publish_dr=True,
-        publish_screening=False,  # screening uses bowl-nl only once (neg-unaffected)
+        publish_screening=False,
         dr_file_suffix="bowl-neg",
         dr_stem_label="bowl-neg-controls",
+        dr_error_levels=(
+            ErrorLevel(0.055, "mild",   col_label="Mild plate effects"),
+            ErrorLevel(0.085, "strong", col_label="Strong plate effects"),
+        ),
+        # screening_error_levels omitted - publish_screening=False
     ),
     DisturbanceScenario(
         key="half_column_neg_affected",
@@ -156,6 +198,11 @@ DISTURBANCES: List[DisturbanceScenario] = [
         publish_screening=False,
         dr_file_suffix="column",
         dr_stem_label="half-columns-neg-controls",
+        dr_error_levels=(
+            ErrorLevel(0.2, "mild",   col_label="Mild plate effects"),
+            ErrorLevel(0.4, "strong", col_label="Strong plate effects"),
+        ),
+        # screening_error_levels omitted - publish_screening=False
     ),
 ]
 

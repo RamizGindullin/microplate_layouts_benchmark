@@ -43,33 +43,57 @@ from benchmark_common import (
     screening_plate_types,
     validate_layout_registry_consistency,
 )
-from benchmark_disturbances import screening_disturbances
+from benchmark_disturbances import (
+    DISTURBANCES,
+    dr_scenarios,
+    screening_disturbances,
+)
 
 validate_layout_registry_consistency()
 
-SCREENING_PANEL_CASES = [
-    ("0.03-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.06-pna-0.99{today_tag}.csv", 500),  # mild
-    ("0.06-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.1-pna-0.99{today_tag}.csv",  500),  # moderate
-    ("0.08-10-10-0.99-stdev-3-4", "screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv",  500),  # strong
-]
+def _build_screening_panel_cases() -> List[Tuple[str, str, int]]:
+    cases = []
+    for d in screening_disturbances():
+        for lv in (d.screening_error_levels or ()):
+            if lv.panel_neg_pos is None or lv.panel_fig_label is None:
+                continue
+            neg, pos = lv.panel_neg_pos
+            fig_name = f"{lv.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4"
+            csv_tmpl = f"screening-residuals-{pos}-{neg}-{lv.value}-pna-0.99{{today_tag}}.csv"
+            cases.append((fig_name, csv_tmpl, 500))
+    return cases
+
+SCREENING_PANEL_CASES = _build_screening_panel_cases()
 
 # Each entry: (residuals_file_template, fig_name_suffix).
 # The batch index column has been removed — plot_roc_curves / plot_pr_curves
 # now average over all batches automatically.
-SCREENING_ROC_PR_CASES = [
-    ("screening-residuals-10-10-0.2-pna-0.99{today_tag}.csv", "10-10-0.2-1.png"),
-    ("screening-residuals-10-10-0.2-pna-0.95{today_tag}.csv", "10-10-0.2-5.png"),
-    ("screening-residuals-10-10-0.2-pna-0.9{today_tag}.csv",  "10-10-0.2-10.png"),
-    ("screening-residuals-10-10-0.2-pna-0.8{today_tag}.csv",  "10-10-0.2-20.png"),
-    ("screening-residuals-10-10-0.2-pna-0.7{today_tag}.csv",  "10-10-0.2-30.png"),
-    ("screening-residuals-10-10-0.2-pna-0.6{today_tag}.csv",  "10-10-0.2-40.png"),
-    ("screening-residuals-8-8-0.1-pna-0.99{today_tag}.csv",   "8-8-0.1-1.png"),
-    ("screening-residuals-8-8-0.1-pna-0.95{today_tag}.csv",   "8-8-0.1-5.png"),
-    ("screening-residuals-8-8-0.1-pna-0.9{today_tag}.csv",    "8-8-0.1-10.png"),
-    ("screening-residuals-8-8-0.1-pna-0.8{today_tag}.csv",    "8-8-0.1-20.png"),
-    ("screening-residuals-8-8-0.1-pna-0.7{today_tag}.csv",    "8-8-0.1-30.png"),
-    ("screening-residuals-8-8-0.1-pna-0.6{today_tag}.csv",    "8-8-0.1-40.png"),
+_SCREENING_HIT_RATE_PNA = [
+    (1,  0.99),
+    (5,  0.95),
+    (10, 0.9),
+    (20, 0.8),
+    (30, 0.7),
+    (40, 0.6),
 ]
+
+def _build_screening_roc_pr_cases() -> List[Tuple[str, str]]:
+    cases = []
+    for d in screening_disturbances():
+        for lv in (d.screening_error_levels or ()):
+            if lv.panel_neg_pos is None:
+                continue
+            neg, pos = lv.panel_neg_pos
+            for hit_rate, pna in _SCREENING_HIT_RATE_PNA:
+                csv_tmpl = (
+                    f"screening-residuals-{pos}-{neg}-{lv.value}"
+                    f"-pna-{pna}{{today_tag}}.csv"
+                )
+                fig_suffix = f"{pos}-{neg}-{lv.value}-{hit_rate}.png"
+                cases.append((csv_tmpl, fig_suffix))
+    return cases
+
+SCREENING_ROC_PR_CASES = _build_screening_roc_pr_cases()
 
 # Control-layout figure inputs are derived from benchmark_common.SCREENING_LAYOUT_SPECS.
 
@@ -112,7 +136,11 @@ class ScreeningConfig:
         default_factory=lambda: [(8, 8), (10, 10), (20, 10)]
     )
     error_strength_list: List[float] = field(
-        default_factory=lambda: [0.06, 0.1, 0.2]
+        default_factory=lambda: [
+            lv.value
+            for d in screening_disturbances()
+            for lv in (d.screening_error_levels or ())
+        ]
     )
     hit_rate_list: List[float] = field(
         default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
@@ -742,8 +770,7 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
     cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
     layouts   = SCREENING_LAYOUT_ORDER
     hit_rates = [1, 5, 10, 20, 30, 40]
-    LABEL_MAP = {0.06: "mild", 0.1: "moderate", 0.2: "strong"}
-
+    
     def _sig_flag(a_vals: list, b_vals: list) -> str:
         """Return LaTeX superscript for COMPD-vs-PLAID significance."""
         if len(a_vals) < 2 or len(b_vals) < 2:
@@ -757,54 +784,56 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
             return r"$^{*}$"
         return ""
 
-    for error in cfg.error_strength_list:
-        strength_label = LABEL_MAP.get(error, str(error))
-        for metric in ("roc", "pr"):
-            col_spec = "ll" + "c" * len(layouts)
-            lines = [
-                rf"\begin{{tabular}}{{{col_spec}}}",
-                r"\toprule",
-                r"Config & Hit rate & " + " & ".join(layouts) + r" \\",
-                r"\midrule",
-            ]
+    for dist in screening_disturbances():
+        for level in (dist.screening_error_levels or ()):
+            error = level.value
+            strength_label = level.label
+            for metric in ("roc", "pr"):
+                col_spec = "ll" + "c" * len(layouts)
+                lines = [
+                    rf"\begin{{tabular}}{{{col_spec}}}",
+                    r"\toprule",
+                    r"Config & Hit rate & " + " & ".join(layouts) + r" \\",
+                    r"\midrule",
+                ]
 
-            first_group = True
-            for neg, pos in cfg.neg_pos_controls_list:
-                per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
-                summ      = _auc_summary(per_batch, metric)
-                group_label = f"{neg}--{pos}"
+                first_group = True
+                for neg, pos in cfg.neg_pos_controls_list:
+                    per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
+                    summ      = _auc_summary(per_batch, metric)
+                    group_label = f"{neg}--{pos}"
 
-                if not first_group:
-                    lines.append(r"\midrule")
-                first_group = False
+                    if not first_group:
+                        lines.append(r"\midrule")
+                    first_group = False
 
-                for i, hr in enumerate(hit_rates):
-                    cfg_cell = group_label if i == 0 else ""
+                    for i, hr in enumerate(hit_rates):
+                        cfg_cell = group_label if i == 0 else ""
 
-                    means = [summ[hr][lay][0] for lay in layouts]
-                    valid_means = [m for m in means if not np.isnan(m)]
-                    best = max(valid_means) if valid_means else float("nan")
+                        means = [summ[hr][lay][0] for lay in layouts]
+                        valid_means = [m for m in means if not np.isnan(m)]
+                        best = max(valid_means) if valid_means else float("nan")
 
-                    row = [cfg_cell, f"{hr}\\%"]
-                    for lay in layouts:
-                        mean, std = summ[hr][lay]
-                        if np.isnan(mean):
-                            cell = "--"
-                        else:
-                            cell = util.fmt_mean_std(mean, std, bold=(mean == best))
-                            if lay == "COMPD":
-                                plaid_vals = per_batch[hr].get("PLAID", {}).get(metric, [])
-                                compd_vals = per_batch[hr].get("COMPD", {}).get(metric, [])
-                                cell += _sig_flag(plaid_vals, compd_vals)
-                        row.append(cell)
+                        row = [cfg_cell, f"{hr}\\%"]
+                        for lay in layouts:
+                            mean, std = summ[hr][lay]
+                            if np.isnan(mean):
+                                cell = "--"
+                            else:
+                                cell = util.fmt_mean_std(mean, std, bold=(mean == best))
+                                if lay == "COMPD":
+                                    plaid_vals = per_batch[hr].get("PLAID", {}).get(metric, [])
+                                    compd_vals = per_batch[hr].get("COMPD", {}).get(metric, [])
+                                    cell += _sig_flag(plaid_vals, compd_vals)
+                            row.append(cell)
 
-                    lines.append(" & ".join(row) + r" \\")
+                        lines.append(" & ".join(row) + r" \\")
 
-            lines += [r"\bottomrule", r"\end{tabular}"]
+                lines += [r"\bottomrule", r"\end{tabular}"]
 
-            out_path = cfg.latex_tables_dir / f"screening-overview-{metric}-{strength_label}.tex"
-            out_path.write_text("\n".join(lines))
-            print(f"  Written: {out_path}")
+                out_path = cfg.latex_tables_dir / f"screening-overview-{metric}-{strength_label}.tex"
+                out_path.write_text("\n".join(lines))
+                print(f"  Written: {out_path}")
 
 
 def generate_metrics_latex_tables(

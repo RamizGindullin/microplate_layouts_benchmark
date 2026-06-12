@@ -264,8 +264,6 @@ def dose_response_curve_examples():
     ]
 
 DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
-BOWL_ERROR_LEVELS = (0.055, 0.085)
-RIGHT_HALF_ERROR_LEVELS = (0.2, 0.4)
 
 def classify_layout_by_key(key: str, specs) -> str:
     """Return display_type for a layout key. Raises ValueError for unknown keys."""

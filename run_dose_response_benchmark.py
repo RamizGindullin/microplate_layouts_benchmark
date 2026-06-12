@@ -34,11 +34,9 @@ import libraries.normalization as nrm
 import libraries.dose_response as dr
 import libraries.utilities as util
 from benchmark_common import (
-    BOWL_ERROR_LEVELS,
     DOSE_RESPONSE_FIGURE_CASES,
     DOSE_RESPONSE_LAYOUT_SPECS,
     DOSE_RESPONSE_RESIDUALS_LAYOUT_ORDER,
-    RIGHT_HALF_ERROR_LEVELS,
     dose_response_curve_examples,
     dose_response_plate_types,
     dilution_for,
@@ -189,17 +187,12 @@ def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
     This function is the single place that maps:
         registry dr_id_text  →  error_function + error_types dict structure
 
-    The error_nl values come from benchmark_common (BOWL_ERROR_LEVELS,
-    RIGHT_HALF_ERROR_LEVELS); the function callables are resolved by the
-    registry helper. Behaviour is identical to the previous hardcoded list.
+    The error_nl values come from benchmark_disturbances; the function
+    callables are resolved by the registry helper.
+    Behaviour is identical to the previous hardcoded list.
     """
     import libraries.disturbances as dt  # noqa: PLC0415
 
-    _ERROR_LEVELS_BY_ID = {
-        "curve_info-new-reg":                 BOWL_ERROR_LEVELS,
-        "bowl-neg-control-new-reg":           BOWL_ERROR_LEVELS,
-        "right-half-neg-control-log-new-reg": RIGHT_HALF_ERROR_LEVELS,
-    }
     _ERROR_TYPE_BY_ID = {
         "curve_info-new-reg":                 "bowl-nl",
         "bowl-neg-control-new-reg":           "bowl-nl",
@@ -214,7 +207,8 @@ def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
     scenarios = []
     for d in dr_scenarios():
         id_text = d.dr_id_text
-        for error_nl in _ERROR_LEVELS_BY_ID[id_text]:
+        for lv in d.dr_error_levels:
+            error_nl = lv.value
             scenarios.append(
                 DoseResponseScenario(
                     id_text=id_text,
@@ -306,22 +300,11 @@ def run_simulations(cfg: DoseResponseConfig) -> None:
 
 RESIDUALS_SCENARIO_GROUPS = [
     (
-        "curve_info-new-reg",
-        BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"residuals-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-    ),
-    (
-        "bowl-neg-control-new-reg",
-        BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"residuals-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-    ),
-    (
-        "right-half-neg-control-log-new-reg",
-        RIGHT_HALF_ERROR_LEVELS,
-        lambda doses, dil, enl: (
-            f"residuals-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}"
-        ),
-    ),
+        d.dr_id_text,
+        tuple(lv.value for lv in d.dr_error_levels),
+        lambda doses, dil, enl, _d=d: f"residuals-1-2-3-{doses}doses-dil{dil}-{_d.dr_stem_label}-{enl}",
+    )
+    for d in dr_scenarios()
 ]
 
 
@@ -332,23 +315,12 @@ RESIDUALS_SCENARIO_GROUPS = [
 #   filename: percentage-low-r2{r2_fig_name_fn(...)}.png
 IC50_DMAX_R2_SCENARIO_GROUPS = [
     (
-        "curve_info-new-reg",
-        BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-bowl-{enl}",
-    ),
-    (
-        "bowl-neg-control-new-reg",
-        BOWL_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-bowl-neg-controls-{enl}",
-    ),
-    (
-        "right-half-neg-control-log-new-reg",
-        RIGHT_HALF_ERROR_LEVELS,
-        lambda doses, dil, enl: f"-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
-        lambda doses, dil, enl: f"-curves-1-2-3-{doses}doses-dil{dil}-half-columns-neg-controls-{enl}",
-    ),
+        d.dr_id_text,
+        tuple(lv.value for lv in d.dr_error_levels),
+        lambda doses, dil, enl, _d=d: f"-1-2-3-{doses}doses-dil{dil}-{_d.dr_stem_label}-{enl}",
+        lambda doses, dil, enl, _d=d: f"-curves-1-2-3-{doses}doses-dil{dil}-{_d.dr_stem_label}-{enl}",
+    )
+    for d in dr_scenarios()
 ]
 
 # -----------------------------------------------------------------------
@@ -1068,7 +1040,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         r2_fn        = _r2_fn_by_id[id_text]
         res_fn       = _res_fn_by_id[id_text]
         is_bowl      = "right-half" not in id_text
-        error_levels = BOWL_ERROR_LEVELS if is_bowl else RIGHT_HALF_ERROR_LEVELS
+        error_levels = d.dr_error_levels
 
         # --- subsection header ---
         if idx == 0:
@@ -1086,17 +1058,13 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             ]
 
         # Shared helper: build filenames_by_row + col_labels for any metric
-        def _build_rows(png_fn):
+        def _build_rows(png_fn, _error_levels=error_levels):
             """Return (col_labels, filenames_by_row) for given filename function."""
-            # Column headers: "Mild / Strong" for 2 levels, else numeric
-            if len(error_levels) == 2:
-                col_labels = ["Mild plate effects", "Strong plate effects"]
-            else:
-                col_labels = [str(e) for e in error_levels]
+            col_labels = [lv.latex_col_label() for lv in _error_levels]
             rows = []
             for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
                 row_lbl = f"{doses} doses"
-                pngs    = [png_fn(doses, dilution, enl) for enl in error_levels]
+                pngs    = [png_fn(doses, dilution, lv.value) for lv in _error_levels]
                 rows.append((row_lbl, pngs))
             return col_labels, rows
 
@@ -1106,7 +1074,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         # ── d_max ──────────────────────────────────────────────────────
         lines += ["", rf"\subsubsection{{{_DR_SUBSUBSECTION['d_diff']}}}", ""]
         col_labels, rows = _build_rows(
-            lambda d, dil, enl: f"dose-response-d_diff{ic50_fn(d, dil, enl)}.png"
+            lambda d, dil, enl, _fn=ic50_fn: f"dose-response-d_diff{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["d_diff"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += _dr_figure_block(
@@ -1120,7 +1088,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         # ── rel IC50 ────────────────────────────────────────────────────
         lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['relic50']}}}", ""]
         col_labels, rows = _build_rows(
-            lambda d, dil, enl: f"dose-response-relic50{ic50_fn(d, dil, enl)}.png"
+            lambda d, dil, enl, _fn=ic50_fn: f"dose-response-relic50{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["relic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += _dr_figure_block(
@@ -1132,7 +1100,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         # ── abs IC50 ────────────────────────────────────────────────────
         lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['absic50']}}}", ""]
         col_labels, rows = _build_rows(
-            lambda d, dil, enl: f"dose-response-absic50{ic50_fn(d, dil, enl)}.png"
+            lambda d, dil, enl, _fn=ic50_fn: f"dose-response-absic50{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["absic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += _dr_figure_block(
@@ -1144,7 +1112,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         # ── residuals ───────────────────────────────────────────────────
         lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['residuals']}}}", ""]
         col_labels, rows = _build_rows(
-            lambda d, dil, enl: f"{res_fn(d, dil, enl)}.png"
+            lambda d, dil, enl, _fn=res_fn: f"{_fn(d, dil, enl)}.png"
         )
         cap = _DR_CAPTIONS["residuals"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += _dr_figure_block(
@@ -1157,7 +1125,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         if is_bowl:
             lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['percentage']}}}", ""]
             col_labels, rows = _build_rows(
-                lambda d, dil, enl: f"percentage-low-r2{r2_fn(d, dil, enl)}.png"
+                lambda d, dil, enl, _fn=r2_fn: f"percentage-low-r2{_fn(d, dil, enl)}.png"
             )
             cap = _DR_CAPTIONS["percentage"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
             lines += _dr_figure_block(

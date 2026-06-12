@@ -1125,7 +1125,7 @@ def plot_r2_percentage(
     palette = [s.color for s in DOSE_RESPONSE_LAYOUT_SPECS]
     comparison_labels = list(hue_order)
 
-    fig, ax = plt.subplots(figsize=(3.2, 3.2))
+    fig, ax = plt.subplots(figsize=(4, 3))
 
     # Plot mean of is_low_r2 (0–1) directly; format y-axis as percentages
     sns.barplot(

@@ -54,6 +54,70 @@ from benchmark_disturbances import (
 )
 import libraries.disturbances as _dt_for_registry
 
+# ── Caption templates (verbatim style from existing thin wrappers) ─────────
+_DR_CAPTION_PLACEHOLDER = "DISTURBANCE_DESC"
+
+_DR_CAPTIONS = {
+    "d_diff": (
+        r"Mean absolute difference between expected and obtained heights "
+        r"($d_{\max}$) for dose-response curves using various numbers of "
+        r"doses, replicates, and " + _DR_CAPTION_PLACEHOLDER + r". "
+        r"The 4PL sigmoid curves were fitted using compound data and 4 negative "
+        r"controls such that their mean was equal to the mean of the 20 "
+        r"negative controls on the plate. *** indicates $p\leq10^{-43}$."
+    ),
+    "relic50": (
+        r"Relative IC$_{50}$/EC$_{50}$ error for dose-response curves "
+        r"using various numbers of doses, replicates, and " + _DR_CAPTION_PLACEHOLDER + r". "
+        r"*** indicates $p\leq10^{-43}$."
+    ),
+    "absic50": (
+        r"Absolute IC$_{50}$/EC$_{50}$ error for dose-response curves "
+        r"using various numbers of doses, replicates, and " + _DR_CAPTION_PLACEHOLDER + r". "
+        r"*** indicates $p\leq10^{-43}$."
+    ),
+    "residuals": (
+        r"Residuals (MSE between expected and obtained responses) for "
+        r"dose-response simulations using various numbers of doses, replicates, "
+        r"and " + _DR_CAPTION_PLACEHOLDER + r". *** indicates $p\leq10^{-43}$."
+    ),
+    "percentage": (
+        r"Percentage of dose-response curves with low-quality "
+        r"($R^2 < 80\%$) using various numbers of doses, replicates, and "
+        + _DR_CAPTION_PLACEHOLDER + r". "
+        r"The 4PL sigmoid curves were fitted using compound data and 4 negative "
+        r"controls such that their mean was equal to the mean of the 20 "
+        r"negative controls on the plate."
+    ),
+}
+
+_DR_TABLE_CAPTIONS = {
+    "rel-ic50": (
+        r"Relative IC$_{50}$/EC$_{50}$ MSE overview for "
+        + _DR_CAPTION_PLACEHOLDER
+        + r". Best (lowest) value per row is \textbf{bolded}."
+    ),
+    "abs-ic50": (
+        r"Absolute IC$_{50}$/EC$_{50}$ MSE overview for "
+        + _DR_CAPTION_PLACEHOLDER
+        + r". Best (lowest) value per row is \textbf{bolded}."
+    ),
+    "residuals": (
+        r"Residual MSE overview for "
+        + _DR_CAPTION_PLACEHOLDER
+        + r". Best (lowest) value per row is \textbf{bolded}."
+    ),
+}
+
+# ── Subsubsection titles ───────────────────────────────────────────────────
+_DR_SUBSUBSECTION = {
+    "d_diff":      r"$d_{\max}$ errors",
+    "relic50":     r"Relative IC$_{50}$/EC$_{50}$ errors",
+    "absic50":     r"Absolute IC$_{50}$/EC$_{50}$ errors",
+    "residuals":   r"Residuals",
+    "percentage":  r"Fraction of poor fits (low $R^2$)",
+}
+
 validate_layout_registry_consistency()
 
 # -----------------------------------------------------------------------
@@ -667,9 +731,9 @@ def _write_dr_overview_table(
 
     Row structure when show_scenario_col=True (original behaviour):
       Same as above, but wrapped in an outer scenario grouping separated by
-      \midrule.
+      \\midrule.
 
-    Columns: [Scenario |] Doses | Dil.\ (1:N) | Error | Rep. | <layouts>
+    Columns: [Scenario |] Doses | Dil.\\ (1:N) | Error | Rep. | <layouts>
 
     Best layout per row is bolded.  COMPD gets a significance superscript
     (* / ** / ***) vs PLAID from a Welch t-test.
@@ -845,6 +909,266 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
             )
 
 
+def _dr_col_width(n_cols: int) -> str:
+    """Subfigure width for N data columns beside the 0.05 label column.
+
+    Replicates the exact 0.4 used in the existing wrappers for n_cols=2.
+    For other widths: floor((0.8 / n_cols) * 100) / 100, 2 d.p.
+    """
+    if n_cols == 2:
+        return "0.4"
+    w = int((0.8 / n_cols) * 100) / 100.0
+    return f"{w:.2f}"
+
+
+def _dr_figure_block(
+    *,
+    fig_root: "Path",
+    metric_key: str,
+    filenames_by_row: "List[Tuple[str, List[str]]]",
+    col_labels: "List[str]",
+    caption: str,
+) -> "List[str]":
+    """
+    Produce the lines for one figure* environment.
+
+    Parameters
+    ----------
+    fig_root         : absolute path used for exists() checks only
+    metric_key       : one of the keys in _DR_CAPTIONS / _DR_SUBSUBSECTION
+    filenames_by_row : list of (row_label, [png_basename, ...]) in dose order
+    col_labels       : column header strings (length == len(filenames_by_row[0][1]))
+    caption          : already-formatted caption string
+    """
+    n_cols  = len(col_labels)
+    col_w   = _dr_col_width(n_cols)
+    lines   = []
+
+    def _subfig(width: str, content: str, center: bool = False) -> "List[str]":
+        out = [rf"  \begin{{subfigure}}[c]{{{width}\textwidth}}"]
+        if center:
+            out.append(r"    \centering")
+        out.append(f"    {content}")
+        out.append(r"  \end{subfigure}")
+        return out
+
+    lines += [r"\begin{figure*}[!htbp]", r"  \centering"]
+
+    # Header row: blank label + column headers
+    lines += _subfig(f"0.05", "~")
+    lines.append("  %")
+    for i, col_lbl in enumerate(col_labels):
+        lines += _subfig(f"{col_w}", rf"~~\textbf{{{col_lbl}}}", center=True)
+        if i < n_cols - 1:
+            lines.append("  %")
+
+    # Data rows: one per dose count
+    for row_label, png_names in filenames_by_row:
+        lines.append("")
+        # Rotated dose label
+        lines += [
+            rf"  \begin{{subfigure}}[c]{{0.05\textwidth}}",
+            r"    \begin{tikzpicture}",
+            rf"      \node[rotate=90] {{\textbf{{{row_label}}}}};",
+            r"    \end{tikzpicture}",
+            r"  \end{subfigure}",
+        ]
+        lines.append("  %")
+        for i, png in enumerate(png_names):
+            full = fig_root / png
+            if full.exists():
+                img_line = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"
+            else:
+                img_line = f"% MISSING: figures/{png}"
+            lines += _subfig(f"{col_w}", img_line, center=(i > 0))
+            if i < n_cols - 1:
+                lines.append("  %")
+
+    lines += [
+        "",
+        rf"  \caption{{{caption}}}",
+        r"\end{figure*}",
+    ]
+    return lines
+
+
+def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
+    """Write tikz-figures/dr_section_auto.tex.
+
+    AUTO-GENERATED — do not edit by hand.
+    Re-run with:  python run_dose_response_benchmark.py --stage tables
+
+    Structure
+    ---------
+    \\subsection{<long_label> plate effects}
+      \\subsubsection{d_max errors}
+        figure* (grid: doses × error levels)
+      \\input{tables/dr-overview-rel-ic50-<suffix>}
+      \\subsubsection{Relative IC50 errors}
+        figure*
+      \\input{tables/dr-overview-abs-ic50-<suffix>}
+      \\subsubsection{Absolute IC50 errors}
+        figure*
+      \\subsubsection{Residuals}
+        figure*
+      \\input{tables/dr-overview-residuals-<suffix>}
+      \\subsubsection{Fraction of poor fits}   [bowl only]
+        figure*
+    """
+    tikz_dir = Path("detailed-experimental-results-source") / "tikz-figures"
+    tikz_dir.mkdir(parents=True, exist_ok=True)
+    out_path = tikz_dir / "dr_section_auto.tex"
+
+    results_root = Path("detailed-experimental-results-source")
+    fig_root     = results_root / "figures"
+    tbl_root     = results_root / "tables"
+
+    def _tbl_line(stem: str, disturbance_desc: str) -> str:
+        full = tbl_root / f"{stem}.tex"
+        if not full.exists():
+            return f"% MISSING: tables/{stem}.tex"
+        # stem is e.g. "dr-overview-rel-ic50-bowl-neg"
+        # metric key is the part between "dr-overview-" and the suffix
+        for key in ("rel-ic50", "abs-ic50", "residuals"):
+            if f"-{key}-" in stem:
+                template = _DR_TABLE_CAPTIONS[key]
+                break
+        else:
+            template = "Overview table. " + _DR_CAPTION_PLACEHOLDER + "."
+        caption = template.replace(_DR_CAPTION_PLACEHOLDER, disturbance_desc)
+        label   = "tab:" + stem
+        return "\n".join([
+            r"\begin{table}[H]",
+            r"  \caption{%",
+            f"    {caption}",
+            r"  }",
+            rf"  \label{{{label}}}",
+            r"  \centering",
+            rf"  \input{{tables/{stem}}}",
+            r"\end{table}",
+        ])
+
+    # Lookup dicts built from the module-level lambda groups
+    _ic50_fn_by_id = {g[0]: g[2] for g in IC50_DMAX_R2_SCENARIO_GROUPS}
+    _r2_fn_by_id   = {g[0]: g[3] for g in IC50_DMAX_R2_SCENARIO_GROUPS}
+    _res_fn_by_id  = {g[0]: g[2] for g in RESIDUALS_SCENARIO_GROUPS}
+
+    lines: list[str] = [
+        "% AUTO-GENERATED by run_dose_response_benchmark.py -- DO NOT EDIT.",
+        "% Regenerate with:  python run_dose_response_benchmark.py --stage tables",
+        "%",
+    ]
+
+    for idx, d in enumerate(dr_scenarios()):
+        id_text      = d.dr_id_text
+        emph         = d.emph_name
+        label        = d.long_label
+        suffix       = d.dr_file_suffix
+        ic50_fn      = _ic50_fn_by_id[id_text]
+        r2_fn        = _r2_fn_by_id[id_text]
+        res_fn       = _res_fn_by_id[id_text]
+        is_bowl      = "right-half" not in id_text
+        error_levels = BOWL_ERROR_LEVELS if is_bowl else RIGHT_HALF_ERROR_LEVELS
+
+        # --- subsection header ---
+        if idx == 0:
+            lines += [
+                "",
+                rf"\subsection{{\emph{{{emph}}} plate effects ({label})}}",
+                "",
+            ]
+        else:
+            lines += [
+                "",
+                r"\clearpage",
+                rf"\subsection{{\emph{{{emph}}} plate effects ({label})}}",
+                "",
+            ]
+
+        # Shared helper: build filenames_by_row + col_labels for any metric
+        def _build_rows(png_fn):
+            """Return (col_labels, filenames_by_row) for given filename function."""
+            # Column headers: "Mild / Strong" for 2 levels, else numeric
+            if len(error_levels) == 2:
+                col_labels = ["Mild plate effects", "Strong plate effects"]
+            else:
+                col_labels = [str(e) for e in error_levels]
+            rows = []
+            for doses, dilution in DOSE_RESPONSE_FIGURE_CASES:
+                row_lbl = f"{doses} doses"
+                pngs    = [png_fn(doses, dilution, enl) for enl in error_levels]
+                rows.append((row_lbl, pngs))
+            return col_labels, rows
+
+        def _disturbance_desc():
+            return rf"\emph{{{emph}}} plate-effect strengths"
+
+        # ── d_max ──────────────────────────────────────────────────────
+        lines += ["", rf"\subsubsection{{{_DR_SUBSUBSECTION['d_diff']}}}", ""]
+        col_labels, rows = _build_rows(
+            lambda d, dil, enl: f"dose-response-d_diff{ic50_fn(d, dil, enl)}.png"
+        )
+        cap = _DR_CAPTIONS["d_diff"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
+        lines += _dr_figure_block(
+            fig_root=fig_root,
+            metric_key="d_diff",
+            filenames_by_row=rows,
+            col_labels=col_labels,
+            caption=cap,
+        )
+
+        # ── rel IC50 ────────────────────────────────────────────────────
+        lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['relic50']}}}", ""]
+        col_labels, rows = _build_rows(
+            lambda d, dil, enl: f"dose-response-relic50{ic50_fn(d, dil, enl)}.png"
+        )
+        cap = _DR_CAPTIONS["relic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
+        lines += _dr_figure_block(
+            fig_root=fig_root, metric_key="relic50",
+            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+        )
+        lines += ["", _tbl_line(f"dr-overview-rel-ic50-{suffix}", _disturbance_desc()), ""]
+
+        # ── abs IC50 ────────────────────────────────────────────────────
+        lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['absic50']}}}", ""]
+        col_labels, rows = _build_rows(
+            lambda d, dil, enl: f"dose-response-absic50{ic50_fn(d, dil, enl)}.png"
+        )
+        cap = _DR_CAPTIONS["absic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
+        lines += _dr_figure_block(
+            fig_root=fig_root, metric_key="absic50",
+            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+        )
+        lines += ["", _tbl_line(f"dr-overview-abs-ic50-{suffix}", _disturbance_desc()), ""]
+
+        # ── residuals ───────────────────────────────────────────────────
+        lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['residuals']}}}", ""]
+        col_labels, rows = _build_rows(
+            lambda d, dil, enl: f"{res_fn(d, dil, enl)}.png"
+        )
+        cap = _DR_CAPTIONS["residuals"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
+        lines += _dr_figure_block(
+            fig_root=fig_root, metric_key="residuals",
+            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+        )
+        lines += ["", _tbl_line(f"dr-overview-residuals-{suffix}", _disturbance_desc()), ""]
+
+        # ── R^2 (bowl only) ──────────────────────────────────────────────
+        if is_bowl:
+            lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['percentage']}}}", ""]
+            col_labels, rows = _build_rows(
+                lambda d, dil, enl: f"percentage-low-r2{r2_fn(d, dil, enl)}.png"
+            )
+            cap = _DR_CAPTIONS["percentage"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
+            lines += _dr_figure_block(
+                fig_root=fig_root, metric_key="percentage",
+                filenames_by_row=rows, col_labels=col_labels, caption=cap,
+            )
+
+    out_path.write_text("\n".join(lines) + "\n")
+    print(f"  Written: {out_path}")
+
+
 # -----------------------------------------------------------------------
 # Stage 4: Curves
 # -----------------------------------------------------------------------
@@ -967,6 +1291,7 @@ def main() -> None:
         generate_ic50_latex_tables(cfg)
         generate_dr_full_latex_tables(cfg)
         generate_dr_overview_tables(cfg)
+        generate_dr_section_tex(cfg)
     if args.stage in ("curves", "all"):
         generate_example_curves(cfg)
 

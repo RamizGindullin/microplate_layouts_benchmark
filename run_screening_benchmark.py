@@ -38,6 +38,7 @@ import libraries.utilities as util
 from benchmark_common import (
     SCREENING_LAYOUT_BOX_PAIRS,
     SCREENING_LAYOUT_ORDER,
+    SCREENING_LAYOUT_SPECS,
     screening_control_figure_cases,
     screening_metrics_plate_types,
     screening_plate_types,
@@ -47,6 +48,7 @@ from benchmark_disturbances import (
     DISTURBANCES,
     dr_scenarios,
     screening_disturbances,
+    _disturbance_function_for_screening_type,
 )
 
 validate_layout_registry_consistency()
@@ -64,15 +66,6 @@ def _build_screening_panel_cases() -> List[Tuple[str, str, int]]:
     return cases
 
 SCREENING_PANEL_CASES = _build_screening_panel_cases()
-
-# Error-strength floats used for panel (expected-vs-obtained) figures.
-# These are DIFFERENT from the ROC/PR error strengths in SCREENING_STRENGTH_LABELS.
-# Source: screening_data_expected_obtained{1,2,3}.tex wrappers.
-SCREENING_PANEL_ERROR_FLOATS: Dict[str, float] = {
-    "mild":     0.03,
-    "moderate": 0.05,
-    "strong":   0.08,
-}
 
 # Each entry: (residuals_file_template, fig_name_suffix).
 # The batch index column has been removed — plot_roc_curves / plot_pr_curves
@@ -95,10 +88,10 @@ def _build_screening_roc_pr_cases() -> List[Tuple[str, str]]:
             neg, pos = lv.panel_neg_pos
             for hit_rate, pna in _SCREENING_HIT_RATE_PNA:
                 csv_tmpl = (
-                    f"screening-residuals-{pos}-{neg}-{lv.value}"
+                    f"screening-residuals-{neg}-{pos}-{lv.value}"
                     f"-pna-{pna}{{today_tag}}.csv"
                 )
-                fig_suffix = f"{pos}-{neg}-{lv.value}-{hit_rate}.png"
+                fig_suffix = f"{neg}-{pos}-{lv.value}-{hit_rate}.png"
                 cases.append((csv_tmpl, fig_suffix))
     return cases
 
@@ -202,16 +195,17 @@ class ScreeningConfig:
         default_factory=lambda: [(8, 8), (10, 10), (20, 10)]
     )
     error_strength_list: List[float] = field(
-        default_factory=lambda: [
+        default_factory=lambda: sorted({
             lv.value
             for d in screening_disturbances()
             for lv in (d.screening_error_levels or ())
-        ]
+        })
     )
     hit_rate_list: List[float] = field(
         default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
     )
-
+    metrics_manuscript_controls: Tuple[int, int] = (10, 10)
+    metrics_manuscript_error: float = 0.06
     neg_control_mean: float = 100.0
     neg_stdev: float = 10.0
     pos_stdev: float = 10.0
@@ -221,7 +215,7 @@ class ScreeningConfig:
 
         Normalisation (error_correction) is per-layout, not per-disturbance.
         Each layout's correction is resolved from benchmark_common.SCREENING_LAYOUT_SPECS
-        via LayoutSpec._resolved_error_correction() → defaults to normalize_plate_lowess_2d.
+        via LayoutSpec._resolved_error_correction(), defaults to normalize_plate_lowess_2d.
         To use a different correction for a specific layout, set error_correction
         on that layout's LayoutSpec entry in benchmark_common.py.
         """
@@ -241,13 +235,13 @@ class ScreeningConfig:
 
         Derived from the disturbance registry (benchmark_disturbances.py).
         Normalisation is per-layout, not per-disturbance: each PlateType carries
-        its own error_correction callable. Adding error_correction here would be
-        dead code — the simulation loop calls plate_type.error_correction(...).
+        its own error_correction callable.
         """
-        import libraries.disturbances as dt
-        _fn_map = {"bowl-nl": dt.add_bowlshaped_errors_nl}
         return [
-            {"type": d.screening_type, "error_function": _fn_map[d.screening_type]}
+            {
+                "type": d.screening_type,
+                "error_function": _disturbance_function_for_screening_type(d.screening_type),
+            }
             for d in screening_disturbances()
         ]
 
@@ -315,6 +309,10 @@ def simulate_condition(
             "Zfactor_raw", "SSMD_raw",
             "Zfactor_norm", "SSMD_norm",
         ])
+        
+        # Note: "true_residuals" stores squared residuals vs the normalised plate,
+        # and "obtained_result" is the normalised (error-corrected) signal,
+        # matching the refactored plotting utilities (not the original notebook names).
         residuals_writer.writerow([
             "batch", "layout", "display_type", "error_type", "error", "lost_rows",
             "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
@@ -660,10 +658,22 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
     box_pairs = SCREENING_LAYOUT_BOX_PAIRS
     order = SCREENING_LAYOUT_ORDER
 
-    manuscript_fname = next(
-        f for f in output_files
-        if re.search(r"10-10-0\.06", f)
-    )
+    neg_m, pos_m = cfg.metrics_manuscript_controls
+    err_m = cfg.metrics_manuscript_error
+    
+    pattern = f"screening_metrics_data-{neg_m}-{pos_m}-{err_m}"
+    
+    try:
+        manuscript_fname = next(
+            f for f in output_files
+            if pattern in f
+        )
+    except StopIteration:
+        raise RuntimeError(
+            f"Could not find metrics manuscript file matching {pattern!r} "
+            f"in {len(output_files)} output files"
+        )
+    
     for metric in ("Zfactor", "SSMD"):
         util.plotting_residual_metrics(
             data_directory + manuscript_fname,
@@ -854,6 +864,7 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
         for level in (dist.screening_error_levels or ()):
             error = level.value
             strength_label = level.label
+            dist_key = dist.key  # e.g. "bowl_nl_neg_unaffected"
             for metric in ("roc", "pr"):
                 col_spec = "ll" + "c" * len(layouts)
                 lines = [
@@ -897,9 +908,11 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
 
                 lines += [r"\bottomrule", r"\end{tabular}"]
 
-                out_path = cfg.latex_tables_dir / f"screening-overview-{metric}-{strength_label}.tex"
-                out_path.write_text("\n".join(lines))
-                print(f"  Written: {out_path}")
+                # Disturbance-specific stem
+                dist_stem = f"screening-overview-{metric}-{strength_label}-{dist.key}"
+                out_path_dist = cfg.latex_tables_dir / f"{dist_stem}.tex"
+                out_path_dist.write_text("\n".join(lines))
+                print(f"  Written: {out_path_dist}")
 
 
 def generate_metrics_latex_tables(
@@ -1055,7 +1068,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                 else:
                     inc = f"% MISSING: figures/{png}"
                 lines += [
-                    rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(n_cols)}\textwidth}}",
+                    rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(n_cols)}\textwidth}}",
                     r"    \centering",
                     rf"    \caption{{{spec.display_type}}}",
                     f"    {inc}",
@@ -1101,7 +1114,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
                         png = f"ROC-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
-                            rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(2)}\textwidth}}",
+                            rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
                             rf"    \includegraphics[width=\textwidth]{{figures/{png}}}" if _fig_exists(png) else f"    % MISSING: figures/{png}",
                             rf"    \caption{{{hr}\% hits}}",
@@ -1147,7 +1160,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
                         png = f"PR-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
-                            rf"  \begin{{subfigure}}[b]{{{subfigure_col_width(2)}\textwidth}}",
+                            rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
                             rf"    \includegraphics[width=\textwidth]{{figures/{png}}}" if _fig_exists(png) else f"    % MISSING: figures/{png}",
                             rf"    \caption{{{hr}\% hits}}",
@@ -1174,7 +1187,18 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
 
         for level in levels:
             for metric in ("roc", "pr"):
-                stem  = f"screening-overview-{metric}-{level.label}"
+                # Disturbance-specific and generic stems
+                stem_dist    = f"screening-overview-{metric}-{level.label}-{d.key}"
+                stem_generic = f"screening-overview-{metric}-{level.label}"
+
+                # Which stem to use in \input
+                if _tbl_exists(stem_dist):
+                    stem = stem_dist
+                elif _tbl_exists(stem_generic):
+                    stem = stem_generic
+                else:
+                    stem = None
+
                 label = f"tab:screening-{metric}-{level.label}"
                 cap = (
                     rf"{_METRIC_FULLNAME[metric]}~AUC overview for "
@@ -1193,10 +1217,13 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     r"  }",
                     rf"  \label{{{label}}}",
                 ]
-                if _tbl_exists(stem):
+                if stem is not None:
                     lines.append(rf"  \input{{tables/{stem}}}")
                 else:
-                    lines.append(f"  % MISSING: tables/{stem}.tex")
+                    # Both per-disturbance and generic tables are missing
+                    lines.append(
+                        f"  % MISSING: tables/{stem_dist}.tex and tables/{stem_generic}.tex"
+                    )
                 lines += [r"\end{table*}", ""]
 
         lines.append(r"\clearpage")
@@ -1229,7 +1256,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             errors = _METRICS_DISPLAY_ERRORS  # 9 items, 3×3 grid
             for i, error in enumerate(errors):
                 csv_basename = (
-                    f"screening_metrics_data-{pos_m}-{neg_m}-{error}"
+                    f"screening_metrics_data-{neg_m}-{pos_m}-{error}"
                     f"-{cfg.metrics_date_tag}-{cfg.metrics_id_text}.csv"
                 )
                 png = f"screening-{metric_key}-mse-{csv_basename}.png"

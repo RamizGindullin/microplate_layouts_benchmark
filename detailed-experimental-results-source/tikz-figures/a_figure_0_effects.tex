@@ -1,0 +1,32 @@
+%    \includegraphics[width=0.46\linewidth]{figures/layout 1.png}
+%    \includegraphics[width=0.46\linewidth]{figures/layout 2.png}\\
+%    \includegraphics[width=0.46\linewidth]{figures/layout 3.png}
+%    \includegraphics[width=0.46\linewidth]{figures/layout 4.png}
+    \begin{tikzpicture}[t]
+        \node[anchor = north]
+        (b1) at (0,0)
+        {\includegraphics[width=0.46\linewidth]{figures/plate effects 1 alt.png}};
+        \node[anchor = south] (a1) at ($(b1.north) + (0,-3mm)$)
+        {\scriptsize (\emph{i})~linear row effects};
+        
+
+        \node[anchor = west]
+        (b2) at (b1.east)
+        {\includegraphics[width=0.46\linewidth]{figures/plate effects 2 alt.png}};
+        \node[anchor = south] (a2) at ($(b2.north) + (0,-3mm)$)
+        {\scriptsize (\emph{ii})~linear column effects};
+
+
+        \node[anchor = north]
+        (b3) at (b1.south)
+        {\includegraphics[width=0.46\linewidth]{figures/plate effects 3 alt.png}};
+        \node[anchor = south] (a3) at ($(b3.north) + (0,-3mm)$)
+        {\scriptsize (\emph{iii})~linear row and column effects};
+        
+        \node[anchor = north]
+        (b4) at (b2.south)
+        {\includegraphics[width=0.46\linewidth]{figures/plate effects 4 alt.png}};
+        \node[anchor = south] (a4) at ($(b4.north) + (0,-3mm)$)
+        {\scriptsize (\emph{iv})~bowl-shaped spatial effects};
+    \end{tikzpicture}
+    

@@ -12,8 +12,8 @@ Replaces:
 Stages:
   simulate : generate CSVs under generated-data/dose-response/
   figures  : generate supplement PNGs
-  tables   : generate LaTeX tables
   curves   : generate example curve PNGs
+  tables   : generate LaTeX tables
   all      : simulate to figures to tables to curves  (default)
 """
 
@@ -49,6 +49,7 @@ from benchmark_disturbances import (
     DR_LABEL_BY_ID,
     DR_FILE_SUFFIX_BY_ID,
     DR_STEM_LABEL_BY_ID,
+    _disturbance_function_for_dr_id
 )
 import libraries.disturbances as _dt_for_registry
 
@@ -191,22 +192,11 @@ def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
     callables are resolved by the registry helper.
     Behaviour is identical to the previous hardcoded list.
     """
-    import libraries.disturbances as dt  # noqa: PLC0415
-
-    _ERROR_TYPE_BY_ID = {
-        "curve_info-new-reg":                 "bowl-nl",
-        "bowl-neg-control-new-reg":           "bowl-nl",
-        "right-half-neg-control-log-new-reg": "right-half",
-    }
-    _FUNCTION_BY_ID = {
-        "curve_info-new-reg":                 dt.add_bowlshaped_errors_nl,
-        "bowl-neg-control-new-reg":           dt.add_bowlshaped_errors_nl,
-        "right-half-neg-control-log-new-reg": dt.add_errors_to_right_columns_half,
-    }
-
+    
     scenarios = []
     for d in dr_scenarios():
         id_text = d.dr_id_text
+        fn = _disturbance_function_for_dr_id(id_text)
         for lv in d.dr_error_levels:
             error_nl = lv.value
             scenarios.append(
@@ -214,8 +204,8 @@ def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
                     id_text=id_text,
                     error_nl=error_nl,
                     error_types=[{
-                        "type":             _ERROR_TYPE_BY_ID[id_text],
-                        "error_function":   _FUNCTION_BY_ID[id_text],
+                        "type":             d.dr_error_type,
+                        "error_function":   fn,
                         "error_correction": _DR_CORRECTION,
                         "error":            error_nl,
                     }],
@@ -995,11 +985,8 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         )
         cap = _DR_CAPTIONS["d_diff"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += util.latex_figure_block(
-            fig_root=fig_root,
-            metric_key="d_diff",
-            filenames_by_row=rows,
-            col_labels=col_labels,
-            caption=cap,
+            fig_root=fig_root, filenames_by_row=rows,
+            col_labels=col_labels, caption=cap,
         )
 
         # ── rel IC50 ────────────────────────────────────────────────────
@@ -1009,8 +996,8 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         )
         cap = _DR_CAPTIONS["relic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += util.latex_figure_block(
-            fig_root=fig_root, metric_key="relic50",
-            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+            fig_root=fig_root, filenames_by_row=rows,
+            col_labels=col_labels, caption=cap,
         )
         lines += ["", _tbl_line(f"dr-overview-rel-ic50-{suffix}", _disturbance_desc()), ""]
 
@@ -1021,8 +1008,8 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         )
         cap = _DR_CAPTIONS["absic50"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += util.latex_figure_block(
-            fig_root=fig_root, metric_key="absic50",
-            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+            fig_root=fig_root, filenames_by_row=rows,
+            col_labels=col_labels, caption=cap,
         )
         lines += ["", _tbl_line(f"dr-overview-abs-ic50-{suffix}", _disturbance_desc()), ""]
 
@@ -1033,8 +1020,8 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
         )
         cap = _DR_CAPTIONS["residuals"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
         lines += util.latex_figure_block(
-            fig_root=fig_root, metric_key="residuals",
-            filenames_by_row=rows, col_labels=col_labels, caption=cap,
+            fig_root=fig_root, filenames_by_row=rows,
+            col_labels=col_labels, caption=cap,
         )
         lines += ["", _tbl_line(f"dr-overview-residuals-{suffix}", _disturbance_desc()), ""]
 
@@ -1046,8 +1033,8 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             )
             cap = _DR_CAPTIONS["percentage"].replace(_DR_CAPTION_PLACEHOLDER, _disturbance_desc())
             lines += util.latex_figure_block(
-                fig_root=fig_root, metric_key="percentage",
-                filenames_by_row=rows, col_labels=col_labels, caption=cap,
+                fig_root=fig_root, filenames_by_row=rows,
+                col_labels=col_labels, caption=cap,
             )
 
     out_path.write_text("\n".join(lines) + "\n")
@@ -1155,13 +1142,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--stage",
-        choices=["simulate", "figures", "tables", "curves", "all"],
+        choices=["simulate", "figures", "curves", "tables", "all"],
         default="all",
         help=(
             "simulate: generate CSVs; "
             "figures:  generate supplement PNGs; "
-            "tables:   generate LaTeX tables; "
             "curves:   generate example curve PNGs; "
+            "tables:   generate LaTeX tables; "
             "all:      from simulate to figures to tables to curves"
         ),
     )
@@ -1172,13 +1159,13 @@ def main() -> None:
         run_simulations(cfg)
     if args.stage in ("figures", "all"):
         generate_dose_response_figures(cfg)
+    if args.stage in ("curves", "all"):
+        generate_example_curves(cfg)
     if args.stage in ("tables", "all"):
         generate_ic50_latex_tables(cfg)
         generate_dr_full_latex_tables(cfg)
         generate_dr_overview_tables(cfg)
         generate_dr_section_tex(cfg)
-    if args.stage in ("curves", "all"):
-        generate_example_curves(cfg)
 
 
 if __name__ == "__main__":

@@ -133,6 +133,11 @@ class DisturbanceScenario:
                     e.g. "bowl-neg-controls" ->
                     dr-residuals-mean-std-8doses-...-bowl-neg-controls-0.055.tex.
                     None if publish_dr is False.
+    dr_error_type   Text written into CSV "error_type" column for DR
+    dr_error_levels 
+    screening_error_levels
+                    Levels of the disturbances through which DR and Screenings
+                    are iterated through
     """
     key: str
     emph_name: str
@@ -143,6 +148,7 @@ class DisturbanceScenario:
     publish_screening: bool
     dr_file_suffix: Optional[str] = None
     dr_stem_label: Optional[str] = None
+    dr_error_type: Optional[str] = None   # written into CSV "error_type" column for DR
     dr_error_levels:         Optional[Tuple[ErrorLevel, ...]] = None
     screening_error_levels:  Optional[Tuple[ErrorLevel, ...]] = None
 
@@ -162,6 +168,7 @@ DISTURBANCES: List[DisturbanceScenario] = [
         publish_screening=True,
         dr_file_suffix="bowl",
         dr_stem_label="bowl",
+        dr_error_type="bowl-nl",
         dr_error_levels=(
             ErrorLevel(0.055, "mild",   col_label="Mild plate effects"),
             ErrorLevel(0.085, "strong", col_label="Strong plate effects"),
@@ -190,6 +197,7 @@ DISTURBANCES: List[DisturbanceScenario] = [
         publish_dr=True,
         publish_screening=False,
         dr_file_suffix="bowl-neg",
+        dr_error_type="bowl-nl",
         dr_stem_label="bowl-neg-controls",
         dr_error_levels=(
             ErrorLevel(0.055, "mild",   col_label="Mild plate effects"),
@@ -207,6 +215,7 @@ DISTURBANCES: List[DisturbanceScenario] = [
         publish_screening=False,
         dr_file_suffix="column",
         dr_stem_label="half-columns-neg-controls",
+        dr_error_type="right-half",
         dr_error_levels=(
             ErrorLevel(0.2, "mild",   col_label="Mild plate effects"),
             ErrorLevel(0.4, "strong", col_label="Strong plate effects"),

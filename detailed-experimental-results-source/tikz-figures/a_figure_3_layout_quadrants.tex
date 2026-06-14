@@ -1,0 +1,30 @@
+    \begin{tikzpicture}[t]
+        \fill[fill = red!25]   (5.5,2.0) rectangle (7.5,4.0);
+        \fill[fill = green!25] (7.5,2.0) rectangle (9.5,0.0);
+        \draw[scale = 0.5, ultra thin, black] (11,0) grid (19,8);
+        
+        % board 1 (2 replicates + 0 fake edge wells)
+        \draw[draw = black,ultra thin, fill = black!20] ( 9.25, 0.25) circle (0.2);
+        \draw[draw = black,ultra thin, fill = black!20] ( 5.75, 3.75) circle (0.2);
+        
+        % board 2 (2 replicates + 8 fake edge wells)
+        \filldraw[black] ( 8.25, 1.25) circle (0.2);
+        \filldraw[black] ( 6.75, 2.75) circle (0.2);
+
+        % board 2 w/o quadrants
+        \draw[draw = black, dashed, fill = white] ( 8.25, 3.25) circle (0.2);
+
+       %\draw[-{stealth[length=5mm, width=4mm]}, ultra thick, blue] (5.95,3.55) -- (6.6,2.90);
+       %\draw[-{stealth[length=5mm, width=4mm]}, ultra thick, blue] (9.05,0.45) -- (8.45,1.05);
+        \draw[-{stealth[length=5mm, width=4mm]}, ultra thick, green!40!black] (6.95,2.85) -- (8.05,3.20);
+        
+        
+        \draw[ultra thin] ( 5.25, 4.25) circle (0.2); %0,                            0,
+        \draw[ultra thin] ( 5.75,-0.25) circle (0.2); %num_rows_line + 1,            1,
+        \draw[ultra thin] ( 9.75, 3.75) circle (0.2); %1,                            num_cols_line + 1,
+        \draw[ultra thin] ( 9.75,-0.25) circle (0.2); %num_rows_line + 1,            num_cols_line + 1
+        \draw[ultra thin] ( 7.25, 4.25) circle (0.2); %0,                            floor(num_cols_line / 2),
+        \draw[ultra thin] ( 9.75, 1.75) circle (0.2); %floor(num_rows_line / 2) + 1, num_cols_line + 1,
+        \draw[ultra thin] ( 7.75,-0.25) circle (0.2); %num_rows_line + 1,            floor(num_cols_line / 2) + 1,
+        \draw[ultra thin] ( 5.25, 2.25) circle (0.2); %floor(num_rows_line / 2),     0 
+    \end{tikzpicture}

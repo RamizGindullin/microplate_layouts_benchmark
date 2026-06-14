@@ -1,0 +1,35 @@
+%    \includegraphics[width=0.46\linewidth]{figures/layout 1.png}
+%    \includegraphics[width=0.46\linewidth]{figures/layout 2.png}\\
+%    \includegraphics[width=0.46\linewidth]{figures/layout 3.png}
+%    \includegraphics[width=0.46\linewidth]{figures/layout 4.png}
+    \begin{tikzpicture}[t]
+        \node[anchor = north]
+        (b1) at (0,0)
+        {\includegraphics[width=0.46\linewidth]{figures/layout 1.png}};
+        \node[anchor = south] (a1) at ($(b1.north) + (0,-3mm)$)
+        %{\scriptsize $h = 1, v = 1, e_{\text{out}} = 0, e_{\text{in}} = 0, c = 0$:};
+        {\scriptsize $h = 1, v = 1,\:\:e_{\text{out}},e_{\text{in}},c = 0$:};
+        
+
+        \node[anchor = west]
+        (b2) at (b1.east)
+        {\includegraphics[width=0.46\linewidth]{figures/layout 2.png}};
+        \node[anchor = south] (a2) at ($(b2.north) + (0,-3mm)$)
+        %{\scriptsize $h = 1, v = 1, e_{\text{out}} = 2, e_{\text{in}} = 0, c = 0$:};
+        {\scriptsize $h = 1, v = 1, e_{\text{out}} = 2,\:\:e_{\text{in}},c = 0$:};
+
+
+        \node[anchor = north]
+        (b3) at (b1.south)
+        {\includegraphics[width=0.46\linewidth]{figures/layout 3.png}};
+        \node[anchor = south] (a3) at ($(b3.north) + (0,-3mm)$)
+        %{\scriptsize $h = 2, v = 1, e_{\text{out}} = 0, e_{\text{in}} = 1, c = 0$:};
+        {\scriptsize $h = 2, v = 1, e_{\text{in}} = 1,\:\:e_{\text{out}},c = 0$:};
+        
+        \node[anchor = north]
+        (b4) at (b2.south)
+        {\includegraphics[width=0.46\linewidth]{figures/layout 4.png}};
+        \node[anchor = south] (a4) at ($(b4.north) + (0,-3mm)$)
+        {\scriptsize $h = 1, v = 2, c = 3,\:\:e_{\text{out}},e_{\text{in}} = 0$:};
+    \end{tikzpicture}
+    

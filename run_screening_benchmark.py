@@ -266,6 +266,21 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _unique_strength_levels(levels) -> list:
+    """Return one representative ErrorLevel per logical strength label."""
+    seen: set[str] = set()
+    out = []
+    for level in levels:
+        if level.label in seen:
+            continue
+        seen.add(level.label)
+        out.append(level)
+    return out
+
+
+def _screening_overview_table_stem(dist, metric: str, strength_label: str) -> str:
+    """Filename stem for screening overview tables."""
+    return f"screening-overview-{dist.key}-{metric}-{strength_label}"
 
 # ---------------------------------------------------------------------------
 # Stage 1: Simulation
@@ -823,24 +838,7 @@ def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
 
 
 def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
-    """Generate overview ROC-AUC and PR-AUC tables split by bowl-effect strength.
-
-    One table per (metric, effect_strength) is written to cfg.latex_tables_dir:
-      screening-overview-roc-mild.tex
-      screening-overview-roc-moderate.tex
-      screening-overview-roc-strong.tex
-      screening-overview-pr-mild.tex
-      screening-overview-pr-moderate.tex
-      screening-overview-pr-strong.tex
-
-    Each table has 18 rows: all 3 control configurations x 6 hit rates.
-    Columns: Config, Hit rate, Random, PLAID, COMPD.
-    The COMPD cell receives a significance superscript (* / ** / ***)
-    versus PLAID based on a Welch t-test of per-batch AUC vectors.
-
-    Data source is identical to generate_auc_latex_tables --
-    _collect_per_batch_aucs_for / _auc_summary -- so no re-simulation is needed.
-    """
+    """Generate overview ROC-AUC and PR-AUC tables split by disturbance and strength."""
     from scipy import stats as _st
 
     cfg.latex_tables_dir.mkdir(parents=True, exist_ok=True)
@@ -861,10 +859,12 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
         return ""
 
     for dist in screening_disturbances():
-        for level in (dist.screening_error_levels or ()):
+        levels = _unique_strength_levels(dist.screening_error_levels or ())
+
+        for level in levels:
             error = level.value
             strength_label = level.label
-            dist_key = dist.key  # e.g. "bowl_nl_neg_unaffected"
+
             for metric in ("roc", "pr"):
                 col_spec = "ll" + "c" * len(layouts)
                 lines = [
@@ -908,11 +908,11 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
 
                 lines += [r"\bottomrule", r"\end{tabular}"]
 
-                # Disturbance-specific stem
-                dist_stem = f"screening-overview-{metric}-{strength_label}-{dist.key}"
-                out_path_dist = cfg.latex_tables_dir / f"{dist_stem}.tex"
-                out_path_dist.write_text("\n".join(lines))
-                print(f"  Written: {out_path_dist}")
+                out_path = cfg.latex_tables_dir / (
+                    _screening_overview_table_stem(dist, metric, strength_label) + ".tex"
+                )
+                out_path.write_text("\n".join(lines))
+                print(f"  Written: {out_path}")
 
 
 def generate_metrics_latex_tables(
@@ -1027,6 +1027,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
     for d in screening_disturbances():
         emph    = d.emph_name
         levels  = d.screening_error_levels or ()
+        strength_levels = _unique_strength_levels(levels)
 
         lines += [
             "",
@@ -1091,10 +1092,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
         # Layout: 6 subfigs in 3 rows × 2 cols, each 0.49\textwidth with \hfill.
         lines += [r"\subsubsection{ROC curves}", ""]
 
-        for level in levels:
-            if level.panel_neg_pos is None:
-                continue
-            _unused_neg, _unused_pos = level.panel_neg_pos  # not used for ROC filenames
+        for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
                 ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
                 label = f"fig:screening-roc-{pos}-{neg}-{level.label}"
@@ -1138,9 +1136,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
         # Identical layout to ROC.
         lines += [r"\subsubsection{Precision-recall curves}", ""]
 
-        for level in levels:
-            if level.panel_neg_pos is None:
-                continue
+        for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
                 ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
                 label = f"fig:screening-pr-{pos}-{neg}-{level.label}"
@@ -1185,21 +1181,10 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
         # Each is a table* (full-width) with \small, booktabs, proper caption and \label.
         lines += [r"\subsubsection{AUC overview tables}", ""]
 
-        for level in levels:
+        for level in strength_levels:
             for metric in ("roc", "pr"):
-                # Disturbance-specific and generic stems
-                stem_dist    = f"screening-overview-{metric}-{level.label}-{d.key}"
-                stem_generic = f"screening-overview-{metric}-{level.label}"
-
-                # Which stem to use in \input
-                if _tbl_exists(stem_dist):
-                    stem = stem_dist
-                elif _tbl_exists(stem_generic):
-                    stem = stem_generic
-                else:
-                    stem = None
-
-                label = f"tab:screening-{metric}-{level.label}"
+                stem  = _screening_overview_table_stem(d, metric, level.label)
+                label = f"tab:screening-{d.key}-{metric}-{level.label}"
                 cap = (
                     rf"{_METRIC_FULLNAME[metric]}~AUC overview for "
                     rf"\emph{{{emph}}} plate effects ({level.label} strength). "
@@ -1217,13 +1202,10 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     r"  }",
                     rf"  \label{{{label}}}",
                 ]
-                if stem is not None:
+                if _tbl_exists(stem):
                     lines.append(rf"  \input{{tables/{stem}}}")
                 else:
-                    # Both per-disturbance and generic tables are missing
-                    lines.append(
-                        f"  % MISSING: tables/{stem_dist}.tex and tables/{stem_generic}.tex"
-                    )
+                    lines.append(f"  % MISSING: tables/{stem}.tex")
                 lines += [r"\end{table*}", ""]
 
         lines.append(r"\clearpage")

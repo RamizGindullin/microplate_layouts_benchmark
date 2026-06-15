@@ -787,7 +787,7 @@ def _collect_per_batch_aucs_for(
 
 def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
     """Backwards-compatible wrapper for the primary 10-10-0.2 scenario."""
-    return _collect_per_batch_aucs_for(cfg, neg_controls=10, pos_controls=10, error=0.2,  dist_key=dist.key)
+    return _collect_per_batch_aucs_for(cfg, neg_controls=10, pos_controls=10, error=0.2)
 
 
 def _auc_summary(per_batch: dict, metric: str) -> dict:
@@ -825,33 +825,37 @@ def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
     d  = cfg.latex_tables_dir
     hr = [1, 5, 10, 20, 30, 40]
     ly = SCREENING_LAYOUT_ORDER
+    
+    for dist in screening_disturbances():
+        levels = _unique_strength_levels(dist.screening_error_levels or ())
+        for level in levels:
+            error = level.value
+            for neg, pos in cfg.neg_pos_controls_list:
+                for error in cfg.error_strength_list:
+                    tag       = f"{dist.key}-{neg}-{pos}-{error}"
+                    per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error, dist_key=dist.key)
+                    roc_summ  = _auc_summary(per_batch, "roc")
+                    pr_summ   = _auc_summary(per_batch, "pr")
 
-    for neg, pos in cfg.neg_pos_controls_list:
-        for error in cfg.error_strength_list:
-            tag       = f"{neg}-{pos}-{error}"
-            per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
-            roc_summ  = _auc_summary(per_batch, "roc")
-            pr_summ   = _auc_summary(per_batch, "pr")
+                    util.write_latex_auc_table(
+                        roc_summ, hr, ly, d / f"screening-roc-auc-{tag}.tex"
+                    )
+                    util.write_latex_auc_table(
+                        pr_summ,  hr, ly, d / f"screening-pr-auc-{tag}.tex"
+                    )
+                    util.write_latex_auc_pvalue_table(
+                        per_batch, "roc", hr, d / f"screening-roc-pvalues-{tag}.tex"
+                    )
+                    util.write_latex_auc_pvalue_table(
+                        per_batch, "pr",  hr, d / f"screening-pr-pvalues-{tag}.tex"
+                    )
 
-            util.write_latex_auc_table(
-                roc_summ, hr, ly, d / f"screening-roc-auc-{tag}.tex"
-            )
-            util.write_latex_auc_table(
-                pr_summ,  hr, ly, d / f"screening-pr-auc-{tag}.tex"
-            )
-            util.write_latex_auc_pvalue_table(
-                per_batch, "roc", hr, d / f"screening-roc-pvalues-{tag}.tex"
-            )
-            util.write_latex_auc_pvalue_table(
-                per_batch, "pr",  hr, d / f"screening-pr-pvalues-{tag}.tex"
-            )
-
-            # Combined main-paper table for the primary scenario only
-            if neg == 10 and pos == 10 and error == 0.2:
-                util.write_latex_combined_roc_pr_table(
-                    roc_summ, pr_summ, hr, ly,
-                    d / "screening_pr_10-10-0.2.tex",
-                )
+                    # Combined main-paper table for the primary scenario only
+                    if neg == 10 and pos == 10 and error == 0.2:
+                        util.write_latex_combined_roc_pr_table(
+                            roc_summ, pr_summ, hr, ly,
+                            d / "screening_pr_10-10-0.2.tex",
+                        )
 
 
 def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
@@ -893,7 +897,7 @@ def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:
 
                 first_group = True
                 for neg, pos in cfg.neg_pos_controls_list:
-                    per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error)
+                    per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error, dist_key=dist.key)
                     summ      = _auc_summary(per_batch, metric)
                     group_label = f"{neg}--{pos}"
 

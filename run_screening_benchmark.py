@@ -1072,7 +1072,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             cap = (
                 rf"Expected versus obtained screening results for "
                 rf"\emph{{{emph}}} plate effects ({level.label} strength, "
-                rf"{pos}\,--\,{neg} controls). "
+                rf"{neg}\,--\,{pos} controls). "
                 rf"Panels show {layout_enum} layouts "
                 rf"after error correction and normalisation, "
                 rf"with 1\% hit rate and 1~replicate per compound."
@@ -1083,7 +1083,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             layout_display_names = [spec.display_type for spec in SCREENING_LAYOUT_SPECS]
             
             for i, spec in enumerate(SCREENING_LAYOUT_SPECS):
-                png = f"screening-bowl-{level.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4-{spec.key}.png"
+                png = f"screening-bowl-{level.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4-{spec.key}.png"
                 n_cols = len(SCREENING_LAYOUT_SPECS)
                 if _fig_exists(png):
                     inc = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"
@@ -1115,8 +1115,8 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
 
         for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
-                ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
-                label = f"fig:screening-roc-{d.key}-{pos}-{neg}-{level.label}"
+                ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{neg} -- {pos} controls")
+                label = f"fig:screening-roc-{d.key}-{neg}-{pos}-{level.label}"
                 cap = (
                     rf"Comparison of {_METRIC_CURVEDESC['roc']} for "
                     rf"\emph{{{emph}}} plate effects ({level.label} strength) "
@@ -1131,7 +1131,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     left_hr,  _ = hit_rate_pna[row * 2]
                     right_hr, _ = hit_rate_pna[row * 2 + 1]
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
-                        png = f"ROC-{d.key}-{pos}-{neg}-{level.value}-{hr}.png"
+                        png = f"ROC-{d.key}-{neg}-{pos}-{level.value}-{hr}.png"
                         lines += [
                             rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
@@ -1159,8 +1159,8 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
 
         for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
-                ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
-                label = f"fig:screening-pr-{d.key}-{pos}-{neg}-{level.label}"
+                ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{neg} -- {pos} controls")
+                label = f"fig:screening-pr-{d.key}-{neg}-{pos}-{level.label}"
                 cap = (
                     rf"Comparison of {_METRIC_CURVEDESC['pr']} for "
                     rf"\emph{{{emph}}} plate effects ({level.label} strength) "
@@ -1175,7 +1175,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     left_hr,  _ = hit_rate_pna[row * 2]
                     right_hr, _ = hit_rate_pna[row * 2 + 1]
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
-                        png = f"PR-{d.key}-{pos}-{neg}-{level.value}-{hr}.png"
+                        png = f"PR-{d.key}-{neg}-{pos}-{level.value}-{hr}.png"
                         lines += [
                             rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",

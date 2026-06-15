@@ -91,8 +91,8 @@ def _build_screening_roc_pr_cases() -> List[Tuple[str, str]]:
                     f"screening-residuals-{neg}-{pos}-{lv.value}"
                     f"-pna-{pna}{{today_tag}}.csv"
                 )
-                fig_suffix = f"{neg}-{pos}-{lv.value}-{hit_rate}.png"
-                cases.append((csv_tmpl, fig_suffix))
+                fig_suffix = f"{d.key}-{neg}-{pos}-{lv.value}-{hit_rate}.png"
+                cases.append((csv_tmpl, fig_suffix, d.key))
     return cases
 
 SCREENING_ROC_PR_CASES = _build_screening_roc_pr_cases()
@@ -240,6 +240,7 @@ class ScreeningConfig:
         return [
             {
                 "type": d.screening_type,
+                "disturbance_key": d.key,
                 "error_function": _disturbance_function_for_screening_type(d.screening_type),
             }
             for d in screening_disturbances()
@@ -318,7 +319,8 @@ def simulate_condition(
         residuals_writer = csv.writer(residuals_f)
 
         scores_writer.writerow([
-            "batch", "layout", "display_type", "error_type", "error", "lost_rows",
+            "batch", "layout", "display_type",
+            "error_type",  "disturbance_key", "error", "lost_rows",
             "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
             "Zfactor_expected", "SSMD_expected",
             "Zfactor_raw", "SSMD_raw",
@@ -329,7 +331,8 @@ def simulate_condition(
         # and "obtained_result" is the normalised (error-corrected) signal,
         # matching the refactored plotting utilities (not the original notebook names).
         residuals_writer.writerow([
-            "batch", "layout", "display_type", "error_type", "error", "lost_rows",
+            "batch", "layout", "display_type",
+            "error_type", "disturbance_key", "error", "lost_rows",
             "neg_control_mean", "pos_control_mean", "neg_stdev", "pos_stdev",
             "comp_id", "true_residuals", "expected_result",
             "obtained_result", "activity", "plate_id",
@@ -438,7 +441,8 @@ def simulate_condition(
                                 continue
 
                             scores_writer.writerow([
-                                batch, plate_type.type, plate_type.display_type, et["type"], error,
+                                batch, plate_type.type, plate_type.display_type,
+                                et["type"], et["disturbance_key"], error,
                                 lost_rows - 1,
                                 exp_neg_mean, exp_pos_mean,
                                 exp_neg_std, exp_pos_std,
@@ -488,6 +492,7 @@ def simulate_condition(
                                 np.full(res_size, plate_type.type),
                                 np.full(res_size, plate_type.display_type),
                                 np.full(res_size, et["type"]),
+                                np.full(res_size, et["disturbance_key"]),
                                 np.full(res_size, error),
                                 np.full(res_size, lost_rows - 1),
                                 np.full(res_size, exp_neg_mean),
@@ -559,18 +564,20 @@ def generate_roc_pr_curves(cfg: ScreeningConfig) -> None:
     """ROC / PR curves averaged over all batches (mean +/- 1-std band)."""
     ensure_dir(cfg.screening_plots_dir)
 
-    for residuals_file_template, fig_name in SCREENING_ROC_PR_CASES:
+    for residuals_file_template, fig_name, dist_key in SCREENING_ROC_PR_CASES:
         residuals_file = residuals_file_template.format(today_tag=cfg.today_tag)
         residuals_path = cfg.screening_data_dir / residuals_file
         util.plot_roc_curves(
             str(residuals_path),
             "ROC-" + fig_name,
             str(cfg.screening_plots_dir),
+            dist_key=dist_key
         )
         util.plot_pr_curves(
             str(residuals_path),
             "PR-" + fig_name,
             str(cfg.screening_plots_dir),
+            dist_key=dist_key
         )
 
 
@@ -732,8 +739,13 @@ def _collect_per_batch_aucs_for(
     neg_controls: int,
     pos_controls: int,
     error: float,
+    dist_key: Optional[str],
 ) -> dict:
-    """Return {hit_rate: {layout: {"roc": list, "pr": list}}} for one scenario."""
+    """Return {hit_rate: {layout: {"roc": list, "pr": list}}} for one scenario.
+
+    If dist_key is given and the CSV contains a 'disturbance_key' column,
+    only rows matching dist_key are used.
+    """
     hit_rates  = [1, 5, 10, 20, 30, 40]
     pna_values = [0.99, 0.95, 0.9, 0.8, 0.7, 0.6]
     layouts    = SCREENING_LAYOUT_ORDER
@@ -752,6 +764,11 @@ def _collect_per_batch_aucs_for(
             print(f"  WARNING: {csv_path} not found — skipping hit_rate={hit_rate}%")
             continue
         df.columns = df.columns.str.strip()
+
+        # Filter by disturbance_key if the column exists and a key was provided.
+        if dist_key is not None and "disturbance_key" in df.columns:
+            df = df[df["disturbance_key"] == dist_key]
+
         for layout in layouts:
             sub = df[df["display_type"] == layout]
             for _batch_id, grp in sub.groupby("batch"):
@@ -770,7 +787,7 @@ def _collect_per_batch_aucs_for(
 
 def _collect_per_batch_aucs(cfg: "ScreeningConfig") -> dict:
     """Backwards-compatible wrapper for the primary 10-10-0.2 scenario."""
-    return _collect_per_batch_aucs_for(cfg, neg_controls=10, pos_controls=10, error=0.2)
+    return _collect_per_batch_aucs_for(cfg, neg_controls=10, pos_controls=10, error=0.2,  dist_key=dist.key)
 
 
 def _auc_summary(per_batch: dict, metric: str) -> dict:

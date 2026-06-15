@@ -1395,7 +1395,7 @@ def plotting_residual_metrics(screening_scores_data_filename, metric='Zfactor', 
 
 
 
-def _load_screening_residuals(residuals_filename):
+def _load_screening_residuals(residuals_filename, dist_key=None):
     """Read screening residuals CSV, drop lost-row plates, add derived columns.
 
     Returns a cleaned DataFrame with columns including 'display_type',
@@ -1405,7 +1405,10 @@ def _load_screening_residuals(residuals_filename):
     """
     df = pd.read_csv(residuals_filename)
     df = df[df.lost_rows < 1].copy()
-    
+
+    if dist_key is not None and "disturbance_key" in df.columns:
+        df = df[df["disturbance_key"] == dist_key]
+
     # Screening uses inhibition convention: neg_control_mean > pos_control_mean.
     # Lower obtained_result = more inhibited = higher hit probability.
     # Negate so that sklearn scorers (higher = more likely positive) work correctly.
@@ -1472,7 +1475,7 @@ def _plot_roc_pr_all_batches(ax, df, display_type, color, curve_type):
     return f"{display_type} (AUC = {mean_auc:.2f} \u00b1 {std_auc:.2f})"
 
 
-def plot_roc_curves(residuals_filename, fig_name=None, fig_dir=''):
+def plot_roc_curves(residuals_filename, fig_name=None, fig_dir='', dist_key=None):
     """Plot mean ROC curves (± 1-std band) across all batches for every layout.
 
     Layout order, display labels, and colours are driven by the registry so
@@ -1484,7 +1487,7 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir=''):
         fig_dir: directory prefix for the saved figure.
     """
     layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
-    df = _load_screening_residuals(residuals_filename)
+    df = _load_screening_residuals(residuals_filename, dist_key=dist_key)
 
     fig, ax = plt.subplots(figsize=(3, 2))
     legend_labels = []
@@ -1501,7 +1504,7 @@ def plot_roc_curves(residuals_filename, fig_name=None, fig_dir=''):
     plt.close(fig)
 
 
-def plot_pr_curves(residuals_filename, fig_name=None, fig_dir=''):
+def plot_pr_curves(residuals_filename, fig_name=None, fig_dir='', dist_key=None):
     """Plot mean Precision-Recall curves (+/- 1-std band) across all batches.
 
     Layout order, display labels, and colours are driven by the registry so
@@ -1513,7 +1516,7 @@ def plot_pr_curves(residuals_filename, fig_name=None, fig_dir=''):
         fig_dir: directory prefix for the saved figure.
     """
     layout_colors = [spec.color for spec in SCREENING_LAYOUT_SPECS]
-    df = _load_screening_residuals(residuals_filename)
+    df = _load_screening_residuals(residuals_filename, dist_key=dist_key)
 
     fig, ax = plt.subplots(figsize=(3, 2))
     legend_labels = []

@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any, Optional, Callable, Dict, Iterable, List, Tuple
 
 import numpy as np
 np.random.seed(42)
@@ -297,11 +297,11 @@ def simulate_condition(
     ensure_dir(cfg.screening_data_dir)
 
     scores_name = (
-        f"screening_scores_data-{pos_controls}-{neg_controls}-{error}-pna-"
+        f"screening_scores_data-{neg_controls}-{pos_controls}-{error}-pna-"
         f"{percent_non_active}{cfg.today_tag}.csv"
     )
     residuals_name = (
-        f"screening-residuals-{pos_controls}-{neg_controls}-{error}-pna-"
+        f"screening-residuals-{neg_controls}-{pos_controls}-{error}-pna-"
         f"{percent_non_active}{cfg.today_tag}.csv"
     )
 
@@ -753,7 +753,7 @@ def _collect_per_batch_aucs_for(
     result: dict = {}
     for hit_rate, pna in zip(hit_rates, pna_values):
         csv_name = (
-            f"screening-residuals-{pos_controls}-{neg_controls}-{error}"
+            f"screening-residuals-{neg_controls}-{pos_controls}-{error}"
             f"-pna-{pna}{cfg.today_tag}.csv"
         )
         csv_path = cfg.screening_data_dir / csv_name
@@ -831,31 +831,23 @@ def generate_auc_latex_tables(cfg: "ScreeningConfig") -> None:
         for level in levels:
             error = level.value
             for neg, pos in cfg.neg_pos_controls_list:
-                for error in cfg.error_strength_list:
-                    tag       = f"{dist.key}-{neg}-{pos}-{error}"
-                    per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error, dist_key=dist.key)
-                    roc_summ  = _auc_summary(per_batch, "roc")
-                    pr_summ   = _auc_summary(per_batch, "pr")
+                tag       = f"{dist.key}-{neg}-{pos}-{error}"
+                per_batch = _collect_per_batch_aucs_for(cfg, neg, pos, error, dist_key=dist.key)
+                roc_summ  = _auc_summary(per_batch, "roc")
+                pr_summ   = _auc_summary(per_batch, "pr")
 
-                    util.write_latex_auc_table(
-                        roc_summ, hr, ly, d / f"screening-roc-auc-{tag}.tex"
-                    )
-                    util.write_latex_auc_table(
-                        pr_summ,  hr, ly, d / f"screening-pr-auc-{tag}.tex"
-                    )
-                    util.write_latex_auc_pvalue_table(
-                        per_batch, "roc", hr, d / f"screening-roc-pvalues-{tag}.tex"
-                    )
-                    util.write_latex_auc_pvalue_table(
-                        per_batch, "pr",  hr, d / f"screening-pr-pvalues-{tag}.tex"
-                    )
-
-                    # Combined main-paper table for the primary scenario only
-                    if neg == 10 and pos == 10 and error == 0.2:
-                        util.write_latex_combined_roc_pr_table(
-                            roc_summ, pr_summ, hr, ly,
-                            d / "screening_pr_10-10-0.2.tex",
-                        )
+                util.write_latex_auc_table(
+                    roc_summ, hr, ly, d / f"screening-roc-auc-{tag}.tex"
+                )
+                util.write_latex_auc_table(
+                    pr_summ,  hr, ly, d / f"screening-pr-auc-{tag}.tex"
+                )
+                util.write_latex_auc_pvalue_table(
+                    per_batch, "roc", hr, d / f"screening-roc-pvalues-{tag}.tex"
+                )
+                util.write_latex_auc_pvalue_table(
+                    per_batch, "pr",  hr, d / f"screening-pr-pvalues-{tag}.tex"
+                )
 
 
 def generate_auc_overview_tables(cfg: "ScreeningConfig") -> None:

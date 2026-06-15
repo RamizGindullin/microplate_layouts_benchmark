@@ -1116,7 +1116,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
         for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
                 ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
-                label = f"fig:screening-roc-{pos}-{neg}-{level.label}"
+                label = f"fig:screening-roc-{d.key}-{pos}-{neg}-{level.label}"
                 cap = (
                     rf"Comparison of {_METRIC_CURVEDESC['roc']} for "
                     rf"\emph{{{emph}}} plate effects ({level.label} strength) "
@@ -1131,7 +1131,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     left_hr,  _ = hit_rate_pna[row * 2]
                     right_hr, _ = hit_rate_pna[row * 2 + 1]
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
-                        png = f"ROC-{pos}-{neg}-{level.value}-{hr}.png"
+                        png = f"ROC-{d.key}-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
                             rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",
@@ -1160,7 +1160,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
         for level in strength_levels:
             for (neg, pos) in cfg.neg_pos_controls_list:
                 ctrl_desc = _CTRL_LABEL.get((neg, pos), f"{pos} -- {neg} controls")
-                label = f"fig:screening-pr-{pos}-{neg}-{level.label}"
+                label = f"fig:screening-pr-{d.key}-{pos}-{neg}-{level.label}"
                 cap = (
                     rf"Comparison of {_METRIC_CURVEDESC['pr']} for "
                     rf"\emph{{{emph}}} plate effects ({level.label} strength) "
@@ -1175,7 +1175,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     left_hr,  _ = hit_rate_pna[row * 2]
                     right_hr, _ = hit_rate_pna[row * 2 + 1]
                     for side, hr in [("left", left_hr), ("right", right_hr)]:
-                        png = f"PR-{pos}-{neg}-{level.value}-{hr}.png"
+                        png = f"PR-{d.key}-{pos}-{neg}-{level.value}-{hr}.png"
                         lines += [
                             rf"  \begin{{subfigure}}[b]{{{util.subfigure_col_width(2)}\textwidth}}",
                             r"    \centering",

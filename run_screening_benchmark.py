@@ -60,8 +60,8 @@ def _build_screening_panel_cases() -> List[Tuple[str, str, int]]:
             if lv.panel_neg_pos is None or lv.panel_fig_label is None:
                 continue
             neg, pos = lv.panel_neg_pos
-            fig_name = f"{lv.panel_fig_label}-{pos}-{neg}-0.99-stdev-3-4"
-            csv_tmpl = f"screening-residuals-{pos}-{neg}-{lv.value}-pna-0.99{{today_tag}}.csv"
+            fig_name = f"{lv.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4"
+            csv_tmpl = f"screening-residuals-{neg}-{pos}-{lv.value}-pna-0.99{{today_tag}}.csv"
             cases.append((fig_name, csv_tmpl, 500))
     return cases
 

@@ -425,7 +425,98 @@ def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:
     generate_ic50_dmax_r2_figures(cfg)
 
 # -----------------------------------------------------------------------
-# Stage 3: Tables
+# Stage 3: Curves
+# -----------------------------------------------------------------------
+
+def generate_example_curves(cfg: DoseResponseConfig) -> None:
+    """
+    Regenerates example per-compound curve PNGs for each layout type.
+
+    The curves notebook overwrites (compounds, concentrations, replicates) from the
+    layout filename for COMPD/PLAID entries, producing different plate_content per
+    layout type. This function mirrors that logic explicitly.
+
+    Output PNGs land in cfg.paper_figures_dir (i.e. figures/).
+    The os.chdir() approach from the original script is replaced by passing an
+    explicit output_dir to dr.plate_curves_after_error.
+    """
+    np.random.seed(42)
+    
+    cfg.paper_figures_dir.mkdir(parents=True, exist_ok=True)
+
+    slopes = [0.5, 1, 1.5, 2]
+    current_e = 50
+    expected_noise = 0.01
+    my_min_dist = 0
+
+    # Right-half disturbance, strength 0.4 (paper scenario)
+    error_nl = 0.4
+    error_type = {
+        "type": "right-half",
+        "error_function": dt.add_errors_to_right_columns_half,
+        "error_correction": _DR_CORRECTION,
+        "error": error_nl,
+    }
+    limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
+
+    for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in dose_response_curve_examples():
+        print("layouts:", layout_type)
+        try:
+            dilution = dilution_for(concentrations)
+        except ValueError:
+            dilution = 8  # fallback retained from original script
+
+        params = [
+            {
+                "compound": i,
+                "b": slopes[i % 3],
+                "c": 0,
+                "d": 100,
+                "e": current_e + 5 * np.random.random(),
+                "startDose": 10000,
+                "nDose": concentrations,
+                "dilution": dilution,
+            }
+            for i in range(compounds)
+        ]
+        df_params = pd.DataFrame.from_dict(params).set_index("compound")
+        df_params["abs IC50"] = dr.IC50(
+            df_params["b"], df_params["c"], df_params["d"], df_params["e"]
+        )
+        plate_content = dr.generate_plate_content(
+            dose_response_params=params, replicates=replicates
+        )
+
+        plate_type_dict = {
+            "type": layout_type,
+            "dir": layout_dir,
+            "error_correction": error_type["error_correction"],
+            "requires_layout_update": False,
+        }
+
+        for limit in limits:
+            dr.plate_curves_after_error(
+                layout_dir,
+                layout_file,
+                plate_content,
+                expected_noise,
+                error_type["error_function"],
+                error_type["error"],
+                error_type["error_correction"],
+                my_min_dist,
+                lose_from_row=limit["from"],
+                lose_to_row=limit["to"],
+                df_params=df_params,
+                plate_type=plate_type_dict,
+                compounds=compounds,
+                concentrations=concentrations,
+                replicates=replicates,
+                output_dir=str(cfg.paper_figures_dir),
+            )
+
+
+# -----------------------------------------------------------------------
+# Stage 4: Tables
 # -----------------------------------------------------------------------
 
 
@@ -1039,97 +1130,6 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
 
     out_path.write_text("\n".join(lines) + "\n")
     print(f"  Written: {out_path}")
-
-
-# -----------------------------------------------------------------------
-# Stage 4: Curves
-# -----------------------------------------------------------------------
-
-def generate_example_curves(cfg: DoseResponseConfig) -> None:
-    """
-    Regenerates example per-compound curve PNGs for each layout type.
-
-    The curves notebook overwrites (compounds, concentrations, replicates) from the
-    layout filename for COMPD/PLAID entries, producing different plate_content per
-    layout type. This function mirrors that logic explicitly.
-
-    Output PNGs land in cfg.paper_figures_dir (i.e. figures/).
-    The os.chdir() approach from the original script is replaced by passing an
-    explicit output_dir to dr.plate_curves_after_error.
-    """
-    np.random.seed(42)
-    
-    cfg.paper_figures_dir.mkdir(parents=True, exist_ok=True)
-
-    slopes = [0.5, 1, 1.5, 2]
-    current_e = 50
-    expected_noise = 0.01
-    my_min_dist = 0
-
-    # Right-half disturbance, strength 0.4 (paper scenario)
-    error_nl = 0.4
-    error_type = {
-        "type": "right-half",
-        "error_function": dt.add_errors_to_right_columns_half,
-        "error_correction": _DR_CORRECTION,
-        "error": error_nl,
-    }
-    limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
-
-    for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in dose_response_curve_examples():
-        print("layouts:", layout_type)
-        try:
-            dilution = dilution_for(concentrations)
-        except ValueError:
-            dilution = 8  # fallback retained from original script
-
-        params = [
-            {
-                "compound": i,
-                "b": slopes[i % 3],
-                "c": 0,
-                "d": 100,
-                "e": current_e + 5 * np.random.random(),
-                "startDose": 10000,
-                "nDose": concentrations,
-                "dilution": dilution,
-            }
-            for i in range(compounds)
-        ]
-        df_params = pd.DataFrame.from_dict(params).set_index("compound")
-        df_params["abs IC50"] = dr.IC50(
-            df_params["b"], df_params["c"], df_params["d"], df_params["e"]
-        )
-        plate_content = dr.generate_plate_content(
-            dose_response_params=params, replicates=replicates
-        )
-
-        plate_type_dict = {
-            "type": layout_type,
-            "dir": layout_dir,
-            "error_correction": error_type["error_correction"],
-            "requires_layout_update": False,
-        }
-
-        for limit in limits:
-            dr.plate_curves_after_error(
-                layout_dir,
-                layout_file,
-                plate_content,
-                expected_noise,
-                error_type["error_function"],
-                error_type["error"],
-                error_type["error_correction"],
-                my_min_dist,
-                lose_from_row=limit["from"],
-                lose_to_row=limit["to"],
-                df_params=df_params,
-                plate_type=plate_type_dict,
-                compounds=compounds,
-                concentrations=concentrations,
-                replicates=replicates,
-                output_dir=str(cfg.paper_figures_dir),
-            )
 
 
 # -----------------------------------------------------------------------

@@ -649,25 +649,36 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     neg_stdev = 3
     pos_stdev = 4
 
-    error_types = cfg.error_types()
     data_directory = str(cfg.metrics_data_dir) + os.sep
 
     for neg_controls, pos_controls in cfg.neg_pos_controls_list:
         print(f"\nPlate {neg_controls}-{pos_controls}:")
         plate_types = screening_metrics_plate_types(neg_controls, pos_controls)
 
-        for i in range(0, max_error):
-            error = i / 100.0
-            fname = sc.test_quality_assessment_metrics(
-                plate_types, error_types, error, id_text,
-                neg_controls, pos_controls,
-                neg_control_mean, pos_control_mean,
-                neg_stdev, pos_stdev,
-                data_directory,
-                run_tag=f"{cfg.metrics_date_tag}-{id_text}",
-            )
-            output_file_list.append(fname)
-            print(f"  error={error:.2f} -> {fname}")
+        for d in screening_disturbances():
+            # One error_type at a time so the CSV filename carries the dist key
+            error_types_single = [
+                {
+                    "type": d.screening_type,
+                    "disturbance_key": d.key,
+                    "error_function": _disturbance_function_for_screening_type(
+                        d.screening_type
+                    ),
+                }
+            ]
+            for i in range(0, max_error):
+                error = i / 100.0
+                fname = sc.test_quality_assessment_metrics(
+                    plate_types, error_types_single, error,
+                    f"{d.key}-{id_text}",           # dist key in run_tag / filename
+                    neg_controls, pos_controls,
+                    neg_control_mean, pos_control_mean,
+                    neg_stdev, pos_stdev,
+                    data_directory,
+                    run_tag=f"{cfg.metrics_date_tag}-{d.key}-{id_text}",
+                )
+                output_file_list.append(fname)
+                print(f"  [{d.key}] error={error:.2f} -> {fname}")
 
     return output_file_list
 
@@ -697,16 +708,34 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
             f"in {len(output_files)} output files"
         )
     
-    for metric in ("Zfactor", "SSMD"):
-        util.plotting_residual_metrics(
-            data_directory + manuscript_fname,
-            metric=metric,
-            fig_name="manuscript",
-            y_max=None, palette=None,
-            plots_directory=plots_directory,
-            box_pairs=box_pairs, order=order,
-        )
-
+    # ── Manuscript figures: bowl_nl_neg_unaffected only ──────────────────
+    # screening_data__paper.tex hardcodes these filenames; do not regenerate
+    # them for other disturbances.
+    MANUSCRIPT_DISTURBANCE = "bowl_nl_neg_unaffected"
+    manuscript_dist = next(
+        (d for d in screening_disturbances() if d.key == MANUSCRIPT_DISTURBANCE), None
+    )
+    if manuscript_dist is not None:
+        neg_m, pos_m = cfg.metrics_manuscript_controls
+        err_m = cfg.metrics_manuscript_error
+        pattern = f"screening_metrics_data-{neg_m}-{pos_m}-{err_m}"
+        # Only files that belong to the bowl_nl_neg_unaffected simulation pass
+        # through here; the CSV is per-(neg,pos,error), not per-disturbance,
+        # so we pick the file and rely on the fact that bowl is first in the
+        # loop — see Fix B below which segregates them.
+        manuscript_files = [f for f in output_files if pattern in f
+                            and MANUSCRIPT_DISTURBANCE in f]  # after Fix B
+        if manuscript_files:
+            for metric in ("Zfactor", "SSMD"):
+                util.plotting_residual_metrics(
+                    data_directory + manuscript_files[0],
+                    metric=metric,
+                    fig_name="manuscript",
+                    y_max=None, palette=None,
+                    plots_directory=plots_directory,
+                    box_pairs=box_pairs, order=order,
+                )
+    # ── Per-disturbance figures ───────────────────────────────────────────
     for fname in output_files:
         util.plotting_residual_metrics(
             data_directory + fname,
@@ -961,43 +990,43 @@ def generate_metrics_latex_tables(
 
     # Representative error levels shown in tables (subset of the full sweep)
     representative_errors = cfg.error_strength_list  # e.g. [0.06, 0.10, 0.20]
-
+    
+    tables_dir = cfg.latex_tables_dir
+    
     for neg, pos in cfg.neg_pos_controls_list:
         tag = f"{neg}-{pos}"
-        for metric in ("Zfactor", "SSMD"):
-            metric_files: "list[str]" = []
-            found_levels: "list[float]" = []
-            for elevel in representative_errors:
-                error_str = str(elevel)
-                candidates = [
-                    f for f in output_files
-                    if (f"-{neg}-{pos}-" in f or f"-{neg}_{pos}-" in f)
-                    and error_str in f
-                ]
-                if not candidates:
+        
+        for d in screening_disturbances():
+            for metric in ("Zfactor", "SSMD"):
+                metric_files: "list[str]" = []
+                found_levels: "list[float]" = []
+                for elevel in representative_errors:
                     candidates = [
                         f for f in output_files
-                        if str(elevel) in f and str(neg) in f and str(pos) in f
+                        if f"-{neg}-{pos}-" in f
+                        and str(elevel) in f
+                        and d.key in f
                     ]
-                if candidates:
-                    metric_files.append(str(data_dir / candidates[0]))
-                    found_levels.append(elevel)
-                else:
-                    print(f"  WARNING: no metrics file for ({neg},{pos}) error={elevel}")
+                    if candidates:
+                        metric_files.append(str(data_dir / candidates[0]))
+                        found_levels.append(elevel)
+                    else:
+                        print(f"  WARNING: no metrics file for ({neg},{pos}) "
+                              f"dist={d.key} error={elevel}")
 
-            if not metric_files:
-                print(f"  Skipping metrics tables for ({neg},{pos}) — no files found")
-                continue
+                if not metric_files:
+                    print(f"  Skipping metrics tables for ({neg},{pos}) — no files found")
+                    continue
 
-            for kind in ("mean-std", "pvalues"):
-                util.write_latex_metrics_table(
-                    data_files=metric_files,
-                    error_levels=found_levels,
-                    metric=metric,
-                    layouts=ly,
-                    path=d / f"metrics-{metric.lower()}-{kind}-{tag}.tex",
-                    kind=kind,
-                )
+                for kind in ("mean-std", "pvalues"):
+                    util.write_latex_metrics_table(
+                        data_files=metric_files,
+                        error_levels=found_levels,
+                        metric=metric,
+                        layouts=ly,
+                        path=tables_dir / f"metrics-{metric.lower()}-{kind}-{tag}-{d.key}.tex",
+                        kind=kind,
+                    )
 
 def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
     """Write tikz-figures/screening_section_auto.tex.
@@ -1253,7 +1282,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             for i, error in enumerate(errors):
                 csv_basename = (
                     f"screening_metrics_data-{neg_m}-{pos_m}-{error}"
-                    f"-{cfg.metrics_date_tag}-{cfg.metrics_id_text}.csv"
+                    f"-{cfg.metrics_date_tag}-{d.key}-{cfg.metrics_id_text}.csv"
                 )
                 png = f"screening-{metric_key}-mse-{csv_basename}.png"
                 sub_cap = "No plate effect" if error == 0.0 else str(i)

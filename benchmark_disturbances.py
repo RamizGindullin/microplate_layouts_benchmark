@@ -223,8 +223,8 @@ DISTURBANCES: List[DisturbanceScenario] = [
         ),
         screening_error_levels=(
             # (10, 10) — primary config, also produces panel figures
-            ErrorLevel(0.2,  "mild",     panel_neg_pos=(10, 10), panel_fig_label=None),
-            ErrorLevel(0.4,  "strong",   panel_neg_pos=(10, 10), panel_fig_label=None),
+            ErrorLevel(0.2,  "mild",     panel_neg_pos=(10, 10), panel_fig_label="0.20"),
+            ErrorLevel(0.4,  "strong",   panel_neg_pos=(10, 10), panel_fig_label="0.40"),
             # (8, 8) — ROC/PR only, no panel figures
             ErrorLevel(0.2,  "mild",     panel_neg_pos=(8, 8),   panel_fig_label=None),
             ErrorLevel(0.4,  "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),

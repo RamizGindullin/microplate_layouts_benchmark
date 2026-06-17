@@ -62,7 +62,7 @@ def _build_screening_panel_cases() -> List[Tuple[str, str, int]]:
             neg, pos = lv.panel_neg_pos
             fig_name = f"{lv.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4"
             csv_tmpl = f"screening-residuals-{neg}-{pos}-{lv.value}-pna-0.99{{today_tag}}.csv"
-            cases.append((fig_name, csv_tmpl, 500))
+            cases.append((fig_name, csv_tmpl, 500, d.key))
     return cases
 
 SCREENING_PANEL_CASES = _build_screening_panel_cases()
@@ -549,7 +549,7 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
     # the "0.06" figure uses simulation error=0.1 because visually that produces
     # the "mild" appearance described in the paper caption.
     # DO NOT change the CSV filenames without regenerating all screening data.
-    for fig_name, residuals_file_template, max_value in SCREENING_PANEL_CASES:
+    for fig_name, residuals_file_template, max_value, dist_key in SCREENING_PANEL_CASES:
         residuals_file = residuals_file_template.format(today_tag=cfg.today_tag)
         residuals_path = cfg.screening_data_dir / residuals_file
         util.plot_screening_plates(
@@ -557,6 +557,7 @@ def generate_screening_panels(cfg: ScreeningConfig) -> None:
             fig_name=fig_name,
             fig_dir=str(cfg.screening_plots_dir),
             max_value=max_value,
+            dist_key=dist_key,
         )
 
 
@@ -1075,7 +1076,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
             layout_display_names = [spec.display_type for spec in SCREENING_LAYOUT_SPECS]
             
             for i, spec in enumerate(SCREENING_LAYOUT_SPECS):
-                png = f"screening-bowl-{level.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4-{spec.key}.png"
+                png = f"screening-{d.key}-{level.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4-{spec.key}.png"
                 n_cols = len(SCREENING_LAYOUT_SPECS)
                 if _fig_exists(png):
                     inc = rf"\includegraphics[width=\textwidth]{{figures/{png}}}"

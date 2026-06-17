@@ -48,6 +48,7 @@ def _disturbance_function_for_screening_type(screening_type: str) -> Callable:
     import libraries.disturbances as dt  # noqa: PLC0415
     _MAP: Dict[str, Callable] = {
         "bowl-nl": dt.add_bowlshaped_errors_nl,
+        "right-half": dt.add_errors_to_right_columns_half,
     }
     try:
         return _MAP[screening_type]
@@ -183,9 +184,9 @@ DISTURBANCES: List[DisturbanceScenario] = [
             ErrorLevel(0.1,  "moderate", panel_neg_pos=(8, 8),   panel_fig_label=None),
             ErrorLevel(0.2,  "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),
             # (10, 20) — ROC/PR only, no panel figures
-            ErrorLevel(0.06, "mild",     panel_neg_pos=(10, 20), panel_fig_label=None),
-            ErrorLevel(0.1,  "moderate", panel_neg_pos=(10, 20), panel_fig_label=None),
-            ErrorLevel(0.2,  "strong",   panel_neg_pos=(10, 20), panel_fig_label=None),
+            ErrorLevel(0.06, "mild",     panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.1,  "moderate", panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.2,  "strong",   panel_neg_pos=(20, 10), panel_fig_label=None),
         ),
     ),
     DisturbanceScenario(
@@ -210,9 +211,9 @@ DISTURBANCES: List[DisturbanceScenario] = [
         emph_name="half-column",
         long_label="column (half-plate)",
         dr_id_text="right-half-neg-control-log-new-reg",
-        screening_type=None,
+        screening_type="right-half",
         publish_dr=True,
-        publish_screening=False,
+        publish_screening=True,
         dr_file_suffix="column",
         dr_stem_label="half-columns-neg-controls",
         dr_error_type="right-half",
@@ -220,7 +221,17 @@ DISTURBANCES: List[DisturbanceScenario] = [
             ErrorLevel(0.2, "mild",   col_label="Mild plate effects"),
             ErrorLevel(0.4, "strong", col_label="Strong plate effects"),
         ),
-        # screening_error_levels omitted - publish_screening=False
+        screening_error_levels=(
+            # (10, 10) — primary config, also produces panel figures
+            ErrorLevel(0.2,  "mild",     panel_neg_pos=(10, 10), panel_fig_label=None),
+            ErrorLevel(0.4,  "strong",   panel_neg_pos=(10, 10), panel_fig_label=None),
+            # (8, 8) — ROC/PR only, no panel figures
+            ErrorLevel(0.2,  "mild",     panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.4,  "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),
+            # (10, 20) — ROC/PR only, no panel figures
+            ErrorLevel(0.2,  "mild",     panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.4,  "strong",   panel_neg_pos=(20, 10), panel_fig_label=None),
+        ),
     ),
 ]
 

@@ -1572,7 +1572,7 @@ def _save_screening_scatter(df, x_col, y_col, neg_control_id, pos_control_id,
     plt.close(fig)
 
 
-def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_value=300):
+def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_value=300, dist_key=None):
     """Plot per-layout screening scatter figures driven by SCREENING_LAYOUT_SPECS."""
     df = _load_screening_residuals(residuals_filename)
 
@@ -1584,8 +1584,9 @@ def plot_screening_plates(residuals_filename, fig_name=None, fig_dir='', max_val
 
     expected_spec = next(s for s in SCREENING_LAYOUT_SPECS if s.display_type == "PLAID")
     expected_df = df[df["display_type"] == expected_spec.display_type]
-
-    prefix = os.path.join(fig_dir, "screening-bowl-" + fig_name) if fig_name else None
+    
+    prefix_tag = dist_key if dist_key else "bowl"
+    prefix = os.path.join(fig_dir, f"screening-{prefix_tag}-" + fig_name) if fig_name else None
     _save_screening_scatter(
         expected_df, "plate_id", "expected_result",
         neg_control_id, pos_control_id,

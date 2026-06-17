@@ -62,7 +62,7 @@ def _build_screening_panel_cases() -> List[Tuple[str, str, int]]:
             neg, pos = lv.panel_neg_pos
             fig_name = f"{lv.panel_fig_label}-{neg}-{pos}-0.99-stdev-3-4"
             csv_tmpl = f"screening-residuals-{neg}-{pos}-{lv.value}-pna-0.99{{today_tag}}.csv"
-            cases.append((fig_name, csv_tmpl, 500, d.key))
+            cases.append((fig_name, csv_tmpl, 700, d.key))
     return cases
 
 SCREENING_PANEL_CASES = _build_screening_panel_cases()
@@ -694,19 +694,6 @@ def generate_metrics_plots(cfg: ScreeningConfig, output_files: List[str]) -> Non
 
     neg_m, pos_m = cfg.metrics_manuscript_controls
     err_m = cfg.metrics_manuscript_error
-    
-    pattern = f"screening_metrics_data-{neg_m}-{pos_m}-{err_m}"
-    
-    try:
-        manuscript_fname = next(
-            f for f in output_files
-            if pattern in f
-        )
-    except StopIteration:
-        raise RuntimeError(
-            f"Could not find metrics manuscript file matching {pattern!r} "
-            f"in {len(output_files)} output files"
-        )
     
     # ── Manuscript figures: bowl_nl_neg_unaffected only ──────────────────
     # screening_data__paper.tex hardcodes these filenames; do not regenerate

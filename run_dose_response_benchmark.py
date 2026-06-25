@@ -91,15 +91,20 @@ _DR_CAPTIONS = {
 }
 
 _DR_TABLE_CAPTIONS = {
+    "dmax": (
+        r"$d_{max}$ error overview for "
+        + _DR_CAPTION_PLACEHOLDER
+        + r". Values are mean absolute differences in fitted $d_{max}$ across compounds. Best (lowest) value per row is \textbf{bolded}."
+    ),
     "rel-ic50": (
         r"Relative IC$_{50}$/EC$_{50}$ MSE overview for "
         + _DR_CAPTION_PLACEHOLDER
         + r". Best (lowest) value per row is \textbf{bolded}."
     ),
     "abs-ic50": (
-        r"Absolute IC$_{50}$/EC$_{50}$ MSE overview for "
+        r"Absolute IC$_{50}$/EC$_{50}$ error overview for "
         + _DR_CAPTION_PLACEHOLDER
-        + r". Best (lowest) value per row is \textbf{bolded}."
+        + r". Values are mean squared absolute IC$_{50}$/EC$_{50}$ estimation errors across compounds. Best (lowest) value per row is \textbf{bolded}."
     ),
     "residuals": (
         r"Residual MSE overview for "
@@ -684,14 +689,16 @@ def _build_dr_overview_df_for_scenario(
       doses, dilution, error_nl, replicates, layout, value
     """
     data_prefix_map = {
+        "dmax":      "absolute_ic50_data",
         "residuals": "residuals",
         "relic50":   "relative_ic50_data",
         "absic50":   "absolute_ic50_data",
     }
     value_col_map = {
+        "dmax":      "diff_d",
         "residuals": "true_residuals",
         "relic50":   "MSE",
-        "absic50":   "MSE",
+        "absic50":   "abs_e_diff",
     }
     
     csv_prefix    = data_prefix_map[prefix]
@@ -717,6 +724,14 @@ def _build_dr_overview_df_for_scenario(
                 df_long = util._stack_replicate_residuals_frames([d1, d2, d3])
             else:
                 df_long = util._stack_replicate_results_frames([d1, d2, d3])
+            if prefix == "dmax":
+                for col in ("d", "fit_d"):
+                    df_long[col] = pd.to_numeric(df_long[col], errors="coerce")
+                df_long["diff_d"] = (df_long["d"] - df_long["fit_d"]).abs()
+            elif prefix == "absic50":
+                for col in ("e", "fit_e"):
+                    df_long[col] = pd.to_numeric(df_long[col], errors="coerce")
+                df_long["abs_e_diff"] = (df_long["e"] - df_long["fit_e"]).abs()
 
             df_long[value_col] = pd.to_numeric(df_long[value_col], errors="coerce")
             df_long = df_long.replace([np.inf, -np.inf], np.nan).dropna(
@@ -917,6 +932,9 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
 
     Nine files are written to cfg.latex_tables_dir:
 
+      dr-overview-dmax-bowl.tex
+      dr-overview-dmax-bowl-neg.tex
+      dr-overview-dmax-column.tex
       dr-overview-residuals-bowl.tex       (bowl, neg unaffected)
       dr-overview-residuals-bowl-neg.tex   (bowl, neg affected)
       dr-overview-residuals-column.tex     (half-plate column)
@@ -939,6 +957,7 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
     d.mkdir(parents=True, exist_ok=True)
 
     for prefix, metric_stem, bold_min in [
+        ("dmax",      "dr-overview-dmax",      True),
         ("residuals", "dr-overview-residuals", True),
         ("relic50",   "dr-overview-rel-ic50",  True),
         ("absic50",   "dr-overview-abs-ic50",  True),
@@ -999,7 +1018,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             return f"% MISSING: tables/{stem}.tex"
         # stem is e.g. "dr-overview-rel-ic50-bowl-neg"
         # metric key is the part between "dr-overview-" and the suffix
-        for key in ("rel-ic50", "abs-ic50", "residuals"):
+        for key in ("dmax", "rel-ic50", "abs-ic50", "residuals"):
             if f"-{key}-" in stem:
                 template = _DR_TABLE_CAPTIONS[key]
                 break
@@ -1079,6 +1098,7 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
             fig_root=fig_root, filenames_by_row=rows,
             col_labels=col_labels, caption=cap,
         )
+        lines += ["", _tbl_line(f"dr-overview-dmax-{suffix}", _disturbance_desc()), ""]
 
         # ── rel IC50 ────────────────────────────────────────────────────
         lines += ["", r"\clearpage", rf"\subsubsection{{{_DR_SUBSUBSECTION['relic50']}}}", ""]

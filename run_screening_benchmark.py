@@ -1105,7 +1105,7 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                     f"    {inc}",
                     r"  \end{subfigure}",
                 ]
-                if i < 2:
+                if n_cols - 1:
                     lines.append(r"  \hfill")
             lines += [
                 rf"  \caption{{{cap}}}",

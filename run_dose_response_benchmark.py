@@ -698,7 +698,7 @@ def _build_dr_overview_df_for_scenario(
         "dmax":      "diff_d",
         "residuals": "true_residuals",
         "relic50":   "MSE",
-        "absic50":   "abs_e_diff",
+        "absic50":   "MSE",
     }
     
     csv_prefix    = data_prefix_map[prefix]
@@ -728,10 +728,6 @@ def _build_dr_overview_df_for_scenario(
                 for col in ("d", "fit_d"):
                     df_long[col] = pd.to_numeric(df_long[col], errors="coerce")
                 df_long["diff_d"] = (df_long["d"] - df_long["fit_d"]).abs()
-            elif prefix == "absic50":
-                for col in ("e", "fit_e"):
-                    df_long[col] = pd.to_numeric(df_long[col], errors="coerce")
-                df_long["abs_e_diff"] = (df_long["e"] - df_long["fit_e"]).abs()
 
             df_long[value_col] = pd.to_numeric(df_long[value_col], errors="coerce")
             df_long = df_long.replace([np.inf, -np.inf], np.nan).dropna(

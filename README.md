@@ -694,7 +694,34 @@ Consequently, adding a generated figure/table to the supplement normally require
 If an expected figure or table does not exist, the generated section contains a `% MISSING: ...` comment rather than failing. Inspect these comments before compiling the supplementary material.
 
 
-## Reproducibility and artifact policy
+## Repository data flow
+
+```text
+Layout matrices (.npy) + benchmark configuration
+                    |
+                    v
+        simulate stage -> generated-data/
+                    |
+                    +-------------------+
+                    |                   |
+                    v                   v
+          figures / metrics          tables
+                    |                   |
+                    v                   v
+              figures/*.png      tables/*.tex
+                    \                   /
+                     \                 /
+                      v               v
+          tikz-figures/*_section_auto.tex
+                      |
+                      v
+             0_supplement.tex / paper LaTeX
+```
+
+The benchmark scripts own generated CSVs, PNGs, LaTeX tables, and `*_section_auto.tex` files. Manual/semantic TikZ layouts remain separate and are maintained by hand.
+
+
+## Reproducibility policy
 
 The repository distinguishes between two types of changes.
 

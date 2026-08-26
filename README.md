@@ -41,29 +41,47 @@ e.g., now the script generates proper matching control layouts on the same distu
 
 ## Contents
 
-- [How to use it](#how-to-use-it)
+- [How to use the benchmark](#how-to-use-the-benchmark)
   - [Generated LaTeX sections](#generated-latex-sections)
-- [Installation](#installation)
+- [Generating and importing layout matrices](#generating-and-importing-layout-matrices)
+  - [Reference layout-generation material](#reference-layout-generation-material)
+  - [PLAID-compatible well encoding and replicate semantics](#plaid-compatible-well-encoding-and-replicate-semantics)
+  - [Experimental conditions versus physical observations](#experimental-conditions-versus-physical-observations)
+    - [Condition-level encoding](#condition-level-encoding)
+    - [Per-well encoding](#per-well-encoding)
+  - [Why unique per-well IDs matter](#why-unique-per-well-ids-matter)
+  - [COMPD compatibility conversion](#compd-compatibility-conversion)
+  - [Ordering is part of the contract](#ordering-is-part-of-the-contract)
+  - [How to choose `requires_layout_update`](#how-to-choose-requires_layout_update)
+  - [Negative controls are identified by the maximum code](#negative-controls-are-identified-by-the-maximum-code)
+  - [Recommended validation before benchmarking](#recommended-validation-before-benchmarking)
+  - [Exporting layouts to `.npy`](#exporting-layouts-to-npy)
+  - [Filename and directory contract](#filename-and-directory-contract)
+  - [Layout families currently compared](#layout-families-currently-compared)
+  - [Effective-layout design principles](#effective-layout-design-principles)
+  - [Safe import workflow](#safe-import-workflow)
+- [Editing benchmark layouts registry](#editing-benchmark-layouts-registry)
+  - [When to edit `benchmark_common.py`](#when-to-edit-benchmark_commonpy)
+  - [Safe editing workflow](#safe-editing-workflow)
+  - [Important conventions](#important-conventions)
+- [Editing disturbance scenarios](#editing-disturbance-scenarios)
+  - [When to edit `benchmark_disturbances.py`](#when-to-edit-benchmark_disturbancespy)
+  - [Preserve stable identifiers](#preserve-stable-identifiers)
+  - [Adding a future disturbance family](#adding-a-future-disturbance-family)
+  - [Publication flags and generated LaTeX](#publication-flags-and-generated-latex)
+  - [Currently enabled disturbance scenarios](#currently-enabled-disturbance-scenarios)
+    - [Dose-response](#dose-response)
+    - [Screening](#screening)
+  - [Checking the active set](#checking-the-active-set)
 - [Running the benchmark pipelines](#running-the-benchmark-pipelines)
   - [Dose-response pipeline](#dose-response-pipeline)
   - [Screening pipeline](#screening-pipeline)
   - [Recommended workflows](#recommended-workflows)
+  - [Generated LaTeX is part of `tables`](#generated-latex-is-part-of-tables)
 - [Repository data flow](#repository-data-flow)
-- [Editing benchmark layouts](#editing-benchmark-layouts)
-- [Generating and importing layout matrices](#generating-and-importing-layout-matrices)
-  - [Reference layout-generation material](#reference-layout-generation-material)
-  - [PLAID-compatible well encoding and replicate semantics](#plaid-compatible-well-encoding-and-replicate-semantics)
-  - [Filename and directory contract](#filename-and-directory-contract)
-  - [Layout families currently compared](#layout-families-currently-compared)
-  - [Safe import workflow](#safe-import-workflow)
-- [Editing disturbance scenarios](#editing-disturbance-scenarios)
-  - [Currently enabled disturbance scenarios](#currently-enabled-disturbance-scenarios)
-  - [Dose-response](#dose-response)
-  - [Screening](#screening)
-- [Reproducibility and artifact policy](#reproducibility-and-artifact-policy)
-- [Troubleshooting](#troubleshooting)
-- [Citation and licence](#citation-and-licence)
-
+- [Reproducibility policy](#reproducibility-policy)
+  - [Presentation/configuration changes](#presentationconfiguration-changes)
+  - [Scientific/data-generating changes](#scientificdata-generating-changes)
 
 # How to use the benchmark
 
@@ -77,7 +95,7 @@ The `tables` stage of both scripts writes both LaTeX table fragments under `tabl
 5. Once the scripts are executed, you can recompile `detailed-experimental-results-source/0_supplement.tex` to generate the pdf with updated plots and tables.
 
 
-### Generated LaTeX sections
+## Generated LaTeX sections
 
 The table stages of benchmark scripts also regenerate two LaTeX section fragments:
 

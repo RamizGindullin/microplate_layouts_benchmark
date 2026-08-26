@@ -12,7 +12,34 @@ e.g., now the script generates proper matching control layouts on the same distu
 <p align="center"><em>Three control layouts on the same disturbed plate.</em></p>
 
 
-# How to use it
+> [!TIP]
+> ## Start here
+>
+> **I want to reproduce existing figures and tables**
+>
+> ```bash
+> python run_dose_response_benchmark.py --stage figures
+> python run_dose_response_benchmark.py --stage tables
+>
+> python run_screening_benchmark.py --stage figures
+> python run_screening_benchmark.py --stage metrics
+> python run_screening_benchmark.py --stage tables
+> ```
+>
+> **I want to change a layout**
+>
+> Read [Editing benchmark layouts](#editing-benchmark-layouts-registry), then run the affected simulation, figure, metrics, and table stages.
+>
+> **I want to change a disturbance or its labels**
+>
+> Read [Editing disturbance scenarios](#editing-disturbance-scenarios).
+>
+> **I want to import a layout from another generator**
+>
+> Read [Generating and importing layout matrices](#generating-and-importing-layout-matrices), especially the layout encoding and filename contract.
+
+
+# How to use the benchmark
 
 To use the benchmark, you need to perform the following steps:
 

@@ -139,6 +139,9 @@ For example, an experiment with 36 compounds, 6 concentrations, and 2 replicates
 
 A layout generator may encode those two replicate wells in either of two ways.
 
+<details>
+<summary><strong>Technical detail: condition-level versus per-well replicate IDs</strong></summary>
+
 #### Condition-level encoding
 
 In a condition-level representation, all replicate wells for the same compound-concentration condition share one integer identifier.
@@ -191,6 +194,7 @@ condition 17, replicate 2  -> 233
 ```
 
 The exact numeric assignment matters because the benchmark maps these identifiers back to the simulated `plate_content` observations.
+</details>
 
 ### Why unique per-well IDs matter
 

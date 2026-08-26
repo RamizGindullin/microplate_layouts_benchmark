@@ -692,3 +692,35 @@ The supplement imports the generated sections with:
 Consequently, adding a generated figure/table to the supplement normally requires changing the relevant Python configuration or generator logic and re-running `--stage tables`; it should not require editing the supplement’s LaTeX wrappers by hand.
 
 If an expected figure or table does not exist, the generated section contains a `% MISSING: ...` comment rather than failing. Inspect these comments before compiling the supplementary material.
+
+
+## Reproducibility and artifact policy
+
+The repository distinguishes between two types of changes.
+
+### Presentation/configuration changes
+
+Examples include:
+
+- Caption wording.
+- Registry display labels.
+- LaTeX table formatting.
+- Generated-section layout.
+- Plot styling that does not alter the underlying calculations.
+
+These changes normally require only the affected `figures`, `metrics`, or `tables` stage.
+
+### Scientific/data-generating changes
+
+Examples include:
+
+- A layout matrix.
+- Plate encoding or `requires_layout_update` behaviour.
+- A normalisation method.
+- A disturbance function or error strength.
+- Simulation parameters, such as dose count, replicate count, control configuration, or hit rate.
+- A metric calculation.
+
+These changes require regenerating downstream artifacts, starting with `simulate`, then the applicable `figures`, `metrics`, and `tables` stages.
+
+Do not combine outputs generated under different scientific configurations in the same supplement or manuscript build.

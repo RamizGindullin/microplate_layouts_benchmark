@@ -39,6 +39,32 @@ e.g., now the script generates proper matching control layouts on the same distu
 > Read [Generating and importing layout matrices](#generating-and-importing-layout-matrices), especially the layout encoding and filename contract.
 
 
+## Contents
+
+- [How to use it](#how-to-use-it)
+  - [Generated LaTeX sections](#generated-latex-sections)
+- [Installation](#installation)
+- [Running the benchmark pipelines](#running-the-benchmark-pipelines)
+  - [Dose-response pipeline](#dose-response-pipeline)
+  - [Screening pipeline](#screening-pipeline)
+  - [Recommended workflows](#recommended-workflows)
+- [Repository data flow](#repository-data-flow)
+- [Editing benchmark layouts](#editing-benchmark-layouts)
+- [Generating and importing layout matrices](#generating-and-importing-layout-matrices)
+  - [Reference layout-generation material](#reference-layout-generation-material)
+  - [PLAID-compatible well encoding and replicate semantics](#plaid-compatible-well-encoding-and-replicate-semantics)
+  - [Filename and directory contract](#filename-and-directory-contract)
+  - [Layout families currently compared](#layout-families-currently-compared)
+  - [Safe import workflow](#safe-import-workflow)
+- [Editing disturbance scenarios](#editing-disturbance-scenarios)
+  - [Currently enabled disturbance scenarios](#currently-enabled-disturbance-scenarios)
+  - [Dose-response](#dose-response)
+  - [Screening](#screening)
+- [Reproducibility and artifact policy](#reproducibility-and-artifact-policy)
+- [Troubleshooting](#troubleshooting)
+- [Citation and licence](#citation-and-licence)
+
+
 # How to use the benchmark
 
 To use the benchmark, you need to perform the following steps:

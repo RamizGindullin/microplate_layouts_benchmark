@@ -262,7 +262,7 @@ This is not a minor averaging difference. It can cause the benchmark to:
 
 For this reason, the main dose-response path requires an effectively unique positive identifier for every physical experimental well.
 
-### COMPD compatibility conversion
+### COMPD 1.00 compatibility conversion
 
 COMPD-generated layouts use the natural condition-level encoding described above: all physical wells that are technical replicates of the same compound-concentration condition use the same ID. This was a result of a misunderstanding during the development of the benchmark for the COMPD paper.
 
@@ -305,6 +305,8 @@ new_id = 1 + i + j × C × D
 This preserves the condition grouping while making every physical observation addressable by the benchmark.
 
 To conclude - if your newly generated layouts produce matrices in the natural condition-level encoding, you have to enable `requires_layout_update` metadata flag.
+
+The current layout generation script for COMPD 1.34 takes into account the actual format of the layouts and thus sets `requires_layout_update=False`.
 
 
 ### Ordering is part of the contract

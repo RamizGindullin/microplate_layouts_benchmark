@@ -95,8 +95,23 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         requires_layout_update=True,
         color="#1b9e77",  # green
         residuals_color="#37185d",
-        plot_order=0,
+        plot_order=1,
         residuals_plot_order=2,
+        curve_example_file="plate_layout_40-12-8-3_01.npy",
+        curve_example_compounds=12,
+        curve_example_concentrations=8,
+        curve_example_replicates=3,
+    ),
+    LayoutSpec(
+        key="compd134",
+        display_type="COMPD134",
+        layout_dir="layouts/compounds_COMPD134_layouts/",
+        regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+        requires_layout_update=False,
+        color="#1b9e79",  # ?
+        residuals_color="#37185e", #?
+        plot_order=0,
+        residuals_plot_order=3,
         curve_example_file="plate_layout_40-12-8-3_01.npy",
         curve_example_compounds=12,
         curve_example_concentrations=8,
@@ -109,7 +124,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         color="#d95f02",  # orange
         residuals_color="#765591",
-        plot_order=1,
+        plot_order=2,
         residuals_plot_order=1,
         curve_example_file="plate_layout_20-12-8-3_01.npy",
         curve_example_compounds=12,
@@ -123,7 +138,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         regex_template=r"plate_layout_rand_(.+?).npy",
         color="#7570b3",  # purple
         residuals_color="#b7a2d8",
-        plot_order=2,
+        plot_order=3,
         residuals_plot_order=0,
         curve_example_file="plate_layout_rand_02.npy",
         curve_example_compounds=12,
@@ -167,6 +182,18 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         plot_order=2,
         control_example_file="plate_layout_10-10_01.npy",
         control_figure_output="detailed-experimental-results-source/figures/plate_compd-controls-rows-error.png",
+        # error_correction not set. Uses default: normalize_plate_lowess_2d.
+        # To use a different correction for this layout, set error_correction= here.
+    ),
+    LayoutSpec(
+        key="compd134",
+        display_type="COMPD134",
+        layout_dir="layouts/screening_COMPD134_layouts/",
+        regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        color="#e61300",
+        plot_order=3,
+        control_example_file="plate_layout_10-10_01.npy",
+        control_figure_output="detailed-experimental-results-source/figures/plate_compd134-controls-rows-error.png",
         # error_correction not set. Uses default: normalize_plate_lowess_2d.
         # To use a different correction for this layout, set error_correction= here.
     ),
@@ -275,7 +302,7 @@ def classify_layout_by_key(key: str, specs) -> str:
 
 def validate_layout_registry_consistency():
     """Assert that dose-response and screening registries cover the same keys."""
-    expected = {"compd", "plaid", "random"}
+    expected = {"compd", "compd134", "plaid", "random"}
     dr_keys = {s.key for s in DOSE_RESPONSE_LAYOUT_SPECS}
     sr_keys = {s.key for s in SCREENING_LAYOUT_SPECS}
     assert dr_keys == expected, f"Dose-response keys mismatch: {dr_keys}"

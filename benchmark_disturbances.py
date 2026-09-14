@@ -49,6 +49,8 @@ def _disturbance_function_for_screening_type(screening_type: str) -> Callable:
     _MAP: Dict[str, Callable] = {
         "bowl-nl": dt.add_bowlshaped_errors_nl,
         "right-half": dt.add_errors_to_right_columns_half,
+        "row-gradient":     dt.add_errors_to_upper_rows,
+        "striped-row-even": dt.add_striped_errors_pure_even,
     }
     try:
         return _MAP[screening_type]
@@ -66,6 +68,8 @@ def _disturbance_function_for_dr_id(dr_id_text: str) -> Callable:
         "curve_info-new-reg":                 dt.add_bowlshaped_errors_nl,
         "bowl-neg-control-new-reg":           dt.add_bowlshaped_errors_nl,
         "right-half-neg-control-log-new-reg": dt.add_errors_to_right_columns_half,
+        "row-gradient-neg-affected-new-reg":     dt.add_errors_to_upper_rows,
+        "striped-row-even-neg-affected-new-reg": dt.add_striped_errors_pure_even,
     }
     try:
         return _MAP[dr_id_text]
@@ -231,6 +235,64 @@ DISTURBANCES: List[DisturbanceScenario] = [
             # (10, 20) — ROC/PR only, no panel figures
             ErrorLevel(0.2,  "mild",     panel_neg_pos=(20, 10), panel_fig_label=None),
             ErrorLevel(0.4,  "strong",   panel_neg_pos=(20, 10), panel_fig_label=None),
+        ),
+    ),
+    DisturbanceScenario(
+        key="row_gradient_neg_affected",
+        emph_name="row-gradient",
+        long_label="row gradient (top-to-bottom)",
+        dr_id_text="row-gradient-neg-affected-new-reg",
+        screening_type="row-gradient",
+        publish_dr=True,
+        publish_screening=True,
+        dr_file_suffix="row-gradient",
+        dr_stem_label="row-gradient",
+        dr_error_type="row-gradient",
+        # Calibrated so error * num_rows gives 10-40% total gradient
+        # (Mpindi et al., Bioinformatics 2015; Dragiev et al. 2012)
+        dr_error_levels=(
+            ErrorLevel(0.006, "mild",   col_label="Mild plate effects"),
+            ErrorLevel(0.012, "strong", col_label="Strong plate effects"),
+        ),
+        screening_error_levels=(
+            ErrorLevel(0.006, "mild",     panel_neg_pos=(10, 10), panel_fig_label="0.006"),
+            ErrorLevel(0.012, "moderate", panel_neg_pos=(10, 10), panel_fig_label="0.012"),
+            ErrorLevel(0.025, "strong",   panel_neg_pos=(10, 10), panel_fig_label="0.025"),
+            ErrorLevel(0.006, "mild",     panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.012, "moderate", panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.025, "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.006, "mild",     panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.012, "moderate", panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.025, "strong",   panel_neg_pos=(20, 10), panel_fig_label=None),
+        ),
+    ),
+    DisturbanceScenario(
+        key="striped_row_even_neg_affected",
+        emph_name="striped-row",
+        long_label="row stripe (even rows elevated)",
+        dr_id_text="striped-row-even-neg-affected-new-reg",
+        screening_type="striped-row-even",
+        publish_dr=True,
+        publish_screening=True,
+        dr_file_suffix="striped-row-even",
+        dr_stem_label="striped-row-even",
+        dr_error_type="striped-row-even",
+        # Calibrated to inter-bank CV for multichannel liquid handlers
+        # (Mpindi et al., Bioinformatics 2015)
+        dr_error_levels=(
+            ErrorLevel(0.05, "mild",   col_label="Mild plate effects"),
+            ErrorLevel(0.10, "strong", col_label="Strong plate effects"),
+        ),
+        screening_error_levels=(
+            ErrorLevel(0.05, "mild",     panel_neg_pos=(10, 10), panel_fig_label="0.05"),
+            ErrorLevel(0.10, "moderate", panel_neg_pos=(10, 10), panel_fig_label="0.10"),
+            ErrorLevel(0.20, "strong",   panel_neg_pos=(10, 10), panel_fig_label="0.20"),
+            ErrorLevel(0.05, "mild",     panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.10, "moderate", panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.20, "strong",   panel_neg_pos=(8, 8),   panel_fig_label=None),
+            ErrorLevel(0.05, "mild",     panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.10, "moderate", panel_neg_pos=(20, 10), panel_fig_label=None),
+            ErrorLevel(0.20, "strong",   panel_neg_pos=(20, 10), panel_fig_label=None),
         ),
     ),
 ]

@@ -1,7 +1,7 @@
 # Benchmark for testing models for microplate layouts
-This is a cleaned version of the benchmarks presented in [COMPD](https://github.com/astra-uu-se/COMPD/tree/main/evaluation_aaai26) and [PLAID](https://github.com/pharmbio/plaid/tree/main/simulations) articles. The goal is to make the replication straightforward to use and to expand (by adding new layout types and new disturbances), and to make the benchmark itself more comprehensive (systematic generation of plots and tables), with polished, refactored scripts instead of notebooks. 
+This is a cleaned version of the benchmarks presented in [COMPD](https://github.com/astra-uu-se/COMPD/tree/main/evaluation_aaai26) and [PLAID](https://github.com/pharmbio/plaid/tree/main/simulations) articles. The goal is to make replication straightforward to use and expand (by adding new layout types and disturbances), and to make the benchmark more comprehensive (systematic generation of plots and tables), with polished, refactored scripts instead of notebooks. As an example of what the script produces, you can find the automatically generated [PDF file](detailed-experimental-results-source/0_supplement.pdf) that compares four layout types: randomized layouts, PLAID layouts, COMPD 1.00 layouts, and COMPD 1.34 layouts.
 
-e.g., now the script generates proper matching control layouts on the same disturbed plate (by making sure that the scale is the same across all the layouts), which makes the comparison between them clear:
+The script also generates proper matching control layouts on the same disturbed plate (by making sure that the scale is the same across all the layouts), which makes the visual comparison between them clear:
 
 <p align="center">
   <img src="figures/plate_compd-controls-rows-error.png" alt="COMPD layout" width="400">

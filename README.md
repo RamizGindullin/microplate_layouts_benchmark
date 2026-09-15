@@ -523,6 +523,8 @@ Each disturbance defines, as applicable:
 - Screening identifiers, including `screening_type` and screening error levels.
 - Publication flags: `publish_dr` and `publish_screening`.
 
+In addition, variables `_disturbance_function_for_screening_type` and `_disturbance_function_for_dr_id` assign the specific disturbance function from `libraries/disturbances.py` for each disturbance type. There is a fair number of various disturbance functions already defined in `libraries/disturbances.py` that can be used in the benchmark, and the file can be expanded to include new functions, if necessary.
+
 The helper functions `dr_scenarios()` and `screening_disturbances()` return only the disturbances marked for publication in the relevant pipeline.
 
 ### When to edit `benchmark_disturbances.py`

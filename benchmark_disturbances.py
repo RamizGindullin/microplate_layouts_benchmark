@@ -28,7 +28,7 @@ No other file needs to be edited for the disturbance metadata itself.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Iterable, List, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,8 @@ class DisturbanceScenario:
                     e.g. "bowl-neg-controls" ->
                     dr-residuals-mean-std-8doses-...-bowl-neg-controls-0.055.tex.
                     None if publish_dr is False.
-    dr_error_type   Text written into CSV "error_type" column for DR
+    dr_error_type   Text written into CSV "error_type" column for DR,
+                    and it is also used in the __disturbance_function_for_dr_ir()
     dr_error_levels 
     screening_error_levels
                     Levels of the disturbances through which DR and Screenings

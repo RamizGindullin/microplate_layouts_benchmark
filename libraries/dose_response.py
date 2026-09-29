@@ -85,16 +85,67 @@ def generate_plate_content(dose_response_params, replicates):
 
 
 def collect_plate_results(layout, plate):
+    layout = np.asarray(layout)
+    plate = np.asarray(plate, dtype=float)
+
+    if layout.ndim != 2:
+        raise ValueError(
+            f"layout must be two-dimensional; got shape {layout.shape}."
+        )
+
+    if plate.shape != layout.shape:
+        raise ValueError(
+            "plate and layout must have identical shapes; got "
+            f"plate={plate.shape}, layout={layout.shape}."
+        )
+
+    if not np.all(np.isfinite(layout)):
+        raise ValueError(
+            "layout contains NaN or infinite values; cannot determine "
+            "material/control identifiers."
+        )
+
+    if not np.all(layout == np.floor(layout)):
+        invalid_values = np.unique(
+            layout[layout != np.floor(layout)]
+        )
+
+        raise ValueError(
+            "layout must contain integer-valued material identifiers. "
+            f"Found non-integer values: {invalid_values}."
+        )
+
+    # Layout IDs are categorical integers, even if the stored .npy array
+    # has float dtype.
+    layout = layout.astype(np.int64, copy=False)
+
     num_rows, num_columns = layout.shape
-    neg_control = np.max(layout)
-    results = np.full(neg_control - 1, float("nan"))
+    neg_control = int(np.max(layout))
+
+    if neg_control < 2:
+        raise ValueError(
+            "The layout must contain at least one non-control material ID "
+            f"and one control ID; largest ID was {neg_control}."
+        )
+
+    results = np.full(
+        neg_control - 1,
+        np.nan,
+        dtype=float,
+    )
 
     for row_index in range(num_rows):
         for col_index in range(num_columns):
-            cell = layout[row_index][col_index]
-            # Fix: was `0 < cell & cell < neg_control` (bitwise precedence bug)
+            cell = layout[row_index, col_index]
+
+            # Compound-dose IDs are 1..neg_control-1.
+            # 0 denotes empty/edge wells; neg_control denotes controls.
             if 0 < cell < neg_control:
-                results[neg_control - cell - 1] = plate[row_index][col_index]
+                results[neg_control - cell - 1] = plate[
+                    row_index,
+                    col_index
+                ]
+
     return results
 
 

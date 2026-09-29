@@ -653,17 +653,18 @@ def add_diagonal_errors_x(plate, error=0.125):
     plate_array = plate.copy()
     
     row_denominator = max(num_rows - 1, 1)
-        col_denominator = max(num_columns - 1, 1)
+    col_denominator = max(num_columns - 1, 1)
 
-        for row_index in range(num_rows):
-            for col_index in range(num_columns):
-                row_strength = row_index / row_denominator
-                col_strength = col_index / col_denominator
-                diagonal_strength = (row_strength + col_strength) / 2.0
+    for row_index in range(num_rows):
+        for col_index in range(num_columns):
+            row_strength = row_index / row_denominator
+            col_strength = col_index / col_denominator
+            diagonal_strength = (row_strength + col_strength) / 2.0
 
-                plate_array[row_index, col_index] *= (
-                    1.0 + error * diagonal_strength
-                )
+            plate_array[row_index, col_index] *= (
+                1.0 + error * diagonal_strength
+            )
+    
             
     return plate_array
 

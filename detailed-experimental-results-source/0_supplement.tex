@@ -4,7 +4,7 @@
 
 \usepackage{authblk}
 
-\title{Constraint Optimization of MicroPlate Designs:\\supplementary materials}
+\title{Comparison of microplate layouts}
 \author{Ramiz Gindullin\textsuperscript{\rm 1}, Mar\'ia~Andre\'ina Francisco~Rodr\'iguez\textsuperscript{\rm 1}}
 \affil{\small
     \textsuperscript{\rm 1}Uppsala University, Sweden\\
@@ -16,26 +16,19 @@
 
 \input{0c_packages}
 \input{0c_macros}
-
+\usepackage{float}
 \begin{document}
 
 
 \maketitle
 
 \begin{abstract}
-    We present detailed results of computational experiments of the paper published in the proceedings of the 2026 AAAI conference~\cite{gindullin26compd}.
+    We present detailed results of the benchmark comparing the following microplate layouts: ranfomized, PLAID, COMPD 1.00 and COMPD 1.34.
 \end{abstract}
 
 \section*{Overview}
 
-Here we provide the complete list of figures and tables containing results of replicated experiments from the paper~\cite{plaid2023} (we will use `the PLAID paper' for brevity):
-
-\begin{itemize}
-    \item Figures~\ref{fig:dose_response_paper} and \ref{fig:screening} correspond to Figures~2 and 3 (resp.) of the PLAID paper;
-
-    \item Figures and tables in \ref{sec:dose-response} and \ref{sec:screening} correspond to Figures~1--24 (resp.) from the supplementary materials of the PLAID paper, with some additions (mostly, in detailed tables).
-
-\end{itemize}
+We present detailed results of the benchmark comparing the following microplate layouts: ranfomized, PLAID, COMPD 1.00 and COMPD 1.34 in, first, dose-response experiments and, second, in screening experiments across various plate distrubances.
 
 \bibliographystyle{plain}
 \bibliography{compd_bibliography}
@@ -43,8 +36,8 @@ Here we provide the complete list of figures and tables containing results of re
 \clearpage
 
 % Compact paper figures (one per experiment type) — kept here for a quick summary.
-\input{tikz-figures/dose_response__paper}
-\input{tikz-figures/screening_data__paper}
+%\input{tikz-figures/dose_response__paper}
+%\input{tikz-figures/screening_data__paper}
 %%============================================================
 \clearpage
 \section{Dose-response experiments}\label{sec:dose-response}

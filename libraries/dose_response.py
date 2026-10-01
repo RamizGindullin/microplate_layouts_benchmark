@@ -203,16 +203,17 @@ def fit_data(
                     )
                 else:
                     neg_dose = np.min(group.dose) / 100
-                    mean_neg_ctrl = [
-                        np.mean(
-                            [
-                                neg_control_values[4 * i],
-                                neg_control_values[4 * i + 1],
-                                neg_control_values[4 * i + 2],
-                                neg_control_values[4 * i + 3],
-                            ]
+                    n_ctrl = len(neg_control_values)
+                    n_groups = 4  # pseudo-observations appended to the fit
+                    if n_ctrl % n_groups != 0:
+                        raise ValueError(
+                            f"neg_control_values has {n_ctrl} entries, which is not "
+                            f"divisible by n_groups={n_groups}. Cannot form equal groups."
                         )
-                        for i in range(4)
+                    group_size = n_ctrl // n_groups
+                    mean_neg_ctrl = [
+                        np.mean(neg_control_values[i * group_size:(i + 1) * group_size])
+                        for i in range(n_groups)
                     ]
                     neg_dose_array = np.full_like(
                         mean_neg_ctrl, neg_dose, dtype=np.float64

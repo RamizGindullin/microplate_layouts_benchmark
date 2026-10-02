@@ -1,6 +1,27 @@
 import numpy as np
 import math
 
+def apply_disturbance(
+    plate,
+    layout,
+    neg_control_id,
+    error_function,
+    error,
+    *,
+    neg_controls_affected=True,
+):
+    """Apply a disturbance, optionally preserving negative-control signals."""
+    if neg_controls_affected:
+        return error_function(plate, error)
+
+    control_mask = np.asarray(layout) == neg_control_id
+    original_controls = plate[control_mask].copy()
+
+    disturbed_plate = error_function(plate, error)
+    disturbed_plate[control_mask] = original_controls
+
+    return disturbed_plate
+
 def add_bowlshaped_errors(plate, error):
     
     plate_array = __add_bowlshaped_errors_to_columns(plate, error)

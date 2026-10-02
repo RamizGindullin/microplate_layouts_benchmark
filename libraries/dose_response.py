@@ -408,6 +408,7 @@ def plate_curves_after_error(
     min_dist=0,
     lose_from_row=0,
     lose_to_row=0,
+    neg_controls_affected=True,
     df_params=None,
     plate_type=None,
     compounds=None,
@@ -435,6 +436,7 @@ def plate_curves_after_error(
         min_dist,
         lose_from_row,
         lose_to_row,
+        neg_controls_affected,
         plate_type,
         compounds,
         concentrations,
@@ -462,6 +464,7 @@ def _run_experiment(
     min_dist,
     lose_from_row,
     lose_to_row,
+    neg_controls_affected=True,
     plate_type=None,
     compounds=None,
     concentrations=None,
@@ -474,7 +477,14 @@ def _run_experiment(
 
     neg_control_id = np.max(layout)
     plate = fill_plate(layout, plate_content, neg_control_value=100, expected_noise=expected_noise)
-    plate = error_function(plate, error)
+    plate = dt.apply_disturbance(
+        plate,
+        layout,
+        neg_control_id,
+        error_function,
+        error,
+        neg_controls_affected=neg_controls_affected,
+    )
     plate = dt.lose_rows(plate, lose_from_row, lose_to_row)
     layout = dt.lose_rows(layout, lose_from_row, lose_to_row)
     plate = normalization_function(plate, layout, neg_control_id, min_dist=min_dist)
@@ -634,6 +644,7 @@ def _run_one_plate(
         et["error_function"],
         et["error"],
         plate_type["error_correction"],
+        neg_controls_affected=et.get("neg_controls_affected", True),
         lose_from_row=limit["from"],
         lose_to_row=limit["to"],
         plate_type=plate_type,

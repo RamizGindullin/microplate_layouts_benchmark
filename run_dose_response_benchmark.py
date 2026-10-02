@@ -183,8 +183,6 @@ class DoseResponseScenario:
     error_nl: float
     error_types: List[Dict[str, Any]]
 
-_DR_CORRECTION = nrm.normalize_plate_nearest_control
-
 def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
     """
     Build the canonical list of DoseResponseScenario objects from the
@@ -209,10 +207,10 @@ def _build_default_dr_scenarios() -> List[DoseResponseScenario]:
                     id_text=id_text,
                     error_nl=error_nl,
                     error_types=[{
-                        "type":             d.dr_error_type,
-                        "error_function":   fn,
-                        "error_correction": _DR_CORRECTION,
-                        "error":            error_nl,
+                        "type":                     d.dr_error_type,
+                        "neg_controls_affected":    d.dr_neg_controls_affected,
+                        "error_function":           fn,
+                        "error":                    error_nl,
                     }],
                 )
             )
@@ -459,7 +457,6 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
     error_type = {
         "type": "right-half",
         "error_function": dt.add_errors_to_right_columns_half,
-        "error_correction": _DR_CORRECTION,
         "error": error_nl,
     }
     limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
@@ -470,7 +467,13 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
             dilution = dilution_for(concentrations)
         except ValueError:
             dilution = 8  # fallback retained from original script
-
+        
+        normalization_function = next(
+            spec._resolved_error_correction()
+            for spec in DOSE_RESPONSE_LAYOUT_SPECS
+            if spec.display_type == layout_type
+        )
+        
         params = [
             {
                 "compound": i,
@@ -495,7 +498,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
         plate_type_dict = {
             "type": layout_type,
             "dir": layout_dir,
-            "error_correction": error_type["error_correction"],
+            "error_correction": normalization_function,
             "requires_layout_update": False,
         }
 
@@ -507,7 +510,7 @@ def generate_example_curves(cfg: DoseResponseConfig) -> None:
                 expected_noise,
                 error_type["error_function"],
                 error_type["error"],
-                error_type["error_correction"],
+                normalization_function,
                 my_min_dist,
                 lose_from_row=limit["from"],
                 lose_to_row=limit["to"],

@@ -44,6 +44,12 @@ def _default_error_correction() -> Callable:
     import libraries.normalization as nrm  # noqa: PLC0415
     return nrm.normalize_plate_lowess_2d
 
+def loess_2d_correction(*args, **kwargs):
+    """Apply the explicitly selected 2D-LOESS correction."""
+    from libraries.normalization import normalize_plate_lowess_2d
+
+    return normalize_plate_lowess_2d(*args, **kwargs)
+
 
 @dataclass(frozen=True)
 class LayoutSpec:
@@ -93,6 +99,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_COMPD_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         requires_layout_update=True,
+        error_correction=loess_2d_correction,
         color="#1b9e77",  # green
         residuals_color="#37185d",
         plot_order=1,
@@ -108,6 +115,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         layout_dir="layouts/compounds_COMPD134_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
         requires_layout_update=False,
+        error_correction=loess_2d_correction,
         color="#1b9e79",  # ?
         residuals_color="#37185e", #?
         plot_order=0,
@@ -122,6 +130,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="PLAID",
         layout_dir="layouts/compounds_PLAID_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#d95f02",  # orange
         residuals_color="#765591",
         plot_order=2,
@@ -136,6 +145,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="Random",
         layout_dir="layouts/compounds_manual_layouts/",
         regex_template=r"plate_layout_rand_(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#7570b3",  # purple
         residuals_color="#b7a2d8",
         plot_order=3,
@@ -154,6 +164,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="Random",
         layout_dir="layouts/screening_RANDM_layouts/",
         regex_template=r"plate_layout_rand_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#59296e",
         plot_order=0,
         control_example_file="plate_layout_rand_10-10_02.npy",
@@ -166,6 +177,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="PLAID",
         layout_dir="layouts/screening_PLAID_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#cc0253",
         plot_order=1,
         control_example_file="plate_layout_10-10_01.npy",
@@ -178,6 +190,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="COMPD",
         layout_dir="layouts/screening_COMPD_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#e68302",
         plot_order=2,
         control_example_file="plate_layout_10-10_01.npy",
@@ -190,6 +203,7 @@ SCREENING_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="COMPD134",
         layout_dir="layouts/screening_COMPD134_layouts/",
         regex_template=r"plate_layout_{neg_controls}-{pos_controls}_(0*)(.+?).npy",
+        error_correction=loess_2d_correction,
         color="#e61300",
         plot_order=3,
         control_example_file="plate_layout_10-10_01.npy",

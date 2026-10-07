@@ -7,6 +7,7 @@ import pandas as pd
 import os
 import re
 from pathlib import Path
+from operator import attrgetter
 from statannotations.Annotator import Annotator # to add p-values to plots
 from scipy import stats
 from random import randrange
@@ -1029,7 +1030,7 @@ def plot_barplot_residuals_data(
     tmp = residuals_df[residuals_df["Replicates"]==1]
     
     fig,ax = plt.subplots(figsize=(4,3))
-    palette = [spec.residuals_color for spec in DOSE_RESPONSE_LAYOUT_SPECS]
+    palette = [spec.residuals_color for spec in sorted(DOSE_RESPONSE_LAYOUT_SPECS, key=attrgetter("plot_order"))]
     
     sns.barplot(
         data=residuals_df,
@@ -1136,7 +1137,7 @@ def plot_barplot_replicate_data(
         plot_col = "MSE"
         plot_data = results_df[results_df["MSE"] != np.inf]
         ylabel = "Mean absolute log10 difference"
-        palette = sns.color_palette("Greens",len(str_order))
+        palette = sns.color_palette("Greens",len(hue_order))
     elif fig_type == "absic50":
         for col in ("e", "fit_e"):
             results_df[col] = pd.to_numeric(results_df[col], errors="coerce")
@@ -1144,12 +1145,12 @@ def plot_barplot_replicate_data(
         plot_col = "abs_e_diff"
         plot_data = results_df.dropna(subset=["abs_e_diff"])
         ylabel = "Mean absolute IC50 difference"
-        palette = sns.color_palette("Oranges",len(str_order))
+        palette = sns.color_palette("Oranges",len(hue_order))
     else:
         plot_col = "diff_d"
         plot_data = results_df
         ylabel = "Mean absolute d difference"
-        palette = sns.color_palette("Greens",len(str_order))
+        palette = sns.color_palette("Greens",len(hue_order))
 
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(4, 3))

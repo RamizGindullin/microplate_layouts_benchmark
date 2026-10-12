@@ -21,6 +21,8 @@ import argparse
 import csv
 import os
 import re
+import random
+random.seed(42)
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -203,6 +205,9 @@ class ScreeningConfig:
     )
     hit_rate_list: List[float] = field(
         default_factory=lambda: [0.01, 0.05, 0.1, 0.2, 0.3, 0.4]
+    )
+    metrics_error_levels: tuple[float, ...] = tuple(
+        i / 100.0 for i in range(26)
     )
     metrics_manuscript_controls: Tuple[int, int] = (10, 10)
     metrics_manuscript_error: float = 0.06
@@ -638,11 +643,12 @@ def generate_screening_figures(cfg: ScreeningConfig) -> None:
 
 def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
     np.random.seed(42)
+    random.seed(42)
+    
     ensure_dir(cfg.metrics_data_dir)
 
     output_file_list: List[str] = []
     id_text = cfg.metrics_id_text
-    max_error = 26
 
     neg_control_mean = 100
     pos_control_mean = 5
@@ -666,8 +672,7 @@ def run_metrics_simulation(cfg: ScreeningConfig) -> List[str]:
                     ),
                 }
             ]
-            for i in range(0, max_error):
-                error = i / 100.0
+            for error in cfg.metrics_error_levels:
                 fname = sc.test_quality_assessment_metrics(
                     plate_types, error_types_single, error,
                     f"{d.key}-{id_text}",           # dist key in run_tag / filename
@@ -975,9 +980,6 @@ def generate_metrics_latex_tables(
             print("  WARNING: no metrics CSV files found — run --stage metrics first")
             return
 
-    # Representative error levels shown in tables (subset of the full sweep)
-    representative_errors = cfg.error_strength_list  # e.g. [0.06, 0.10, 0.20]
-    
     tables_dir = cfg.latex_tables_dir
     
     for neg, pos in cfg.neg_pos_controls_list:
@@ -987,19 +989,28 @@ def generate_metrics_latex_tables(
             for metric in ("Zfactor", "SSMD"):
                 metric_files: "list[str]" = []
                 found_levels: "list[float]" = []
-                for elevel in representative_errors:
+                for elevel in cfg.metrics_error_levels:
+                    prefix = (
+                        f"screening_metrics_data-{neg}-{pos}-{elevel}-"
+                    )
+
                     candidates = [
-                        f for f in output_files
-                        if f"-{neg}-{pos}-" in f
-                        and str(elevel) in f
-                        and d.key in f
+                        filename
+                        for filename in output_files
+                        if filename.startswith(prefix)
+                        and d.key in filename
                     ]
+
                     if candidates:
-                        metric_files.append(str(data_dir / candidates[0]))
+                        metric_files.append(
+                            str(data_dir / candidates[0])
+                        )
                         found_levels.append(elevel)
                     else:
-                        print(f"  WARNING: no metrics file for ({neg},{pos}) "
-                              f"dist={d.key} error={elevel}")
+                        print(
+                            f"  WARNING: no metrics file for ({neg},{pos}) "
+                            f"dist={d.key} error={elevel}"
+                        )
 
                 if not metric_files:
                     print(f"  Skipping metrics tables for ({neg},{pos}) — no files found")
@@ -1014,6 +1025,65 @@ def generate_metrics_latex_tables(
                         path=tables_dir / f"metrics-{metric.lower()}-{kind}-{tag}-{d.key}.tex",
                         kind=kind,
                     )
+
+
+def append_metrics_tables_to_section(lines, cfg, dist):
+    """Append this disturbance's existing metric tables to the generated section.
+
+    This is a function block for run_screening_benchmark.py, not a new module.
+    It reads table fragments only; no simulation or statistics are computed.
+    """
+    import re
+    from pathlib import Path
+
+    table_dir = Path(cfg.latex_tables_dir)
+    titles = {'Zfactor': r"$Z'$-factor", 'SSMD': 'SSMD'}
+    descriptions = {
+        'mean-std': 'Mean and standard deviation of squared estimation errors',
+        'pvalues': 'Pairwise comparison p-values for squared estimation errors',
+    }
+    lines.extend(['', r'\clearpage',
+                  r'\subsubsection{Quality-metric sweep tables}', ''])
+    included = 0
+    for neg, pos in cfg.neg_pos_controls_list:
+        for metric in ('Zfactor', 'SSMD'):
+            for kind in ('mean-std', 'pvalues'):
+                stem = f'metrics-{metric.lower()}-{kind}-{neg}-{pos}-{dist.key}'
+                path = table_dir / f'{stem}.tex'
+                if not path.is_file():
+                    lines.append(f'% MISSING: tables/{stem}.tex')
+                    print(f'  WARNING: missing metric table fragment: {path}')
+                    continue
+
+                fragment = path.read_text(encoding='utf-8')
+                uncommented = re.sub(r'(?<!\\)%[^\n]*', '', fragment)
+                owns_environment = re.search(
+                    r'\\begin\{(?:table\*?|longtable)\}', uncommented
+                ) is not None
+                inclusion = rf'\input{{tables/{stem}}}'
+                if owns_environment:
+                    # Do not nest an existing table/longtable in another float.
+                    lines.extend([inclusion, ''])
+                else:
+                    caption = (
+                        f"{descriptions[kind]} for {titles[metric]} "
+                        rf"under \emph{{{dist.emph_name}}} disturbances, "
+                        f"using {neg} negative and {pos} positive controls. "
+                        "Results cover the configured quality-metric strength sweep."
+                    )
+                    lines.extend([
+                        r'\begin{table*}[!htbp]',
+                        r'  \centering', r'  \small',
+                        rf'  \caption{{{caption}}}',
+                        rf'  \label{{tab:{stem}}}',
+                        '  ' + inclusion,
+                        r'\end{table*}', '',
+                    ])
+                included += 1
+        lines.extend([r'\clearpage', ''])
+    print(f'  Included {included} metric tables for disturbance {dist.key}')
+    return included
+
 
 def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
     """Write tikz-figures/screening_section_auto.tex.
@@ -1292,7 +1362,9 @@ def generate_screening_section_tex(cfg: "ScreeningConfig") -> None:
                 r"\end{figure*}",
                 "",
             ]
-
+        
+        append_metrics_tables_to_section(lines, cfg, d)
+        
         lines.append(r"\clearpage")
 
     out_path.write_text("\n".join(lines) + "\n")

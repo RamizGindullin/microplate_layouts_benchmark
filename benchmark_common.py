@@ -114,7 +114,7 @@ DOSE_RESPONSE_LAYOUT_SPECS: List[LayoutSpec] = [
         display_type="COMPD134",
         layout_dir="layouts/compounds_COMPD134_layouts/",
         regex_template=r"plate_layout_(.*){compounds}-{concentrations}-{replicates}_(0*)(.+?).npy",
-        requires_layout_update=False,
+        requires_layout_update=True,
         error_correction=loess_2d_correction,
         color="#1b3e85",  # ?
         residuals_color="#1d1258", #?
@@ -303,6 +303,18 @@ def dose_response_curve_examples():
         for spec in DOSE_RESPONSE_LAYOUT_SPECS
         if spec.curve_example_file is not None
     ]
+
+
+def dr_curve_stem(layout_key, layout_file, scenario_key):
+    return (
+        f"dr-curve-{layout_key}-"
+        f"{Path(layout_file).stem}-{scenario_key}"
+    )
+
+
+def dr_curve_png_name(stem, compound):
+    return f"{stem}-compound-{int(compound)}.png"
+
 
 DOSE_RESPONSE_FIGURE_CASES = [(6, 18), (8, 8), (12, 4)]
 

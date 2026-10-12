@@ -328,8 +328,17 @@ def normalize_plate_lowess_2d(plate_array_in, layout, neg_control_id, min_dist=N
     finite_mask = np.isfinite(z)
     if finite_mask.sum() < 2:
         return plate_array_in.copy()
+
     x, y, z = x[finite_mask], y[finite_mask], z[finite_mask]
-    
+
+    if np.all(z == z[0]):
+        # A constant control surface requires only global rescaling.
+        return normalize_plate_mean(
+            plate_array_in,
+            layout,
+            neg_control_id,
+        )
+
     xnew = y_adjusted['Columns'].to_numpy().reshape((-1,))
     ynew = y_adjusted['Rows'].to_numpy().reshape((-1,))
     znew = y_adjusted['Intensity'].to_numpy().reshape((-1,))

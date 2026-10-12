@@ -9,6 +9,8 @@ import seaborn as sns
 
 from sklearn.metrics import r2_score
 
+from benchmark_common import dr_curve_png_name
+
 import libraries.utilities as util
 import libraries.disturbances as dt
 
@@ -161,6 +163,7 @@ def fit_data(
     df_params=None,
     layout_type="",
     neg_control_values=None,
+    curve_figure_stem=None,
     output_dir=".",
 ):
     """Fit LL.4 dose–response curves to plate data.
@@ -328,9 +331,13 @@ def fit_data(
             lgnd = plt.legend(loc="lower right", fontsize=10)
             _resize_control_legend_marker(lgnd)
 
-            out_path = os.path.join(
-                output_dir, f"{layout_type}_compound_{name}-right-half.png"
-            )
+            if curve_figure_stem is None:
+                filename = f"{layout_type}_compound_{name}-right-half.png"
+            else:
+                filename = dr_curve_png_name(curve_figure_stem, name)
+
+            out_path = os.path.join(output_dir, filename)
+            
             plt.savefig(out_path, bbox_inches="tight", dpi=1200)
             plt.close()
 
@@ -414,6 +421,7 @@ def plate_curves_after_error(
     compounds=None,
     concentrations=None,
     replicates=None,
+    curve_figure_stem=None,
     output_dir=".",
 ):
     """Run one plate experiment and fit dose–response curves.
@@ -450,6 +458,7 @@ def plate_curves_after_error(
         df_params=df_params,
         layout_type=layout_file,
         output_dir=output_dir,
+        curve_figure_stem=curve_figure_stem,
     )
 
 
@@ -492,22 +501,17 @@ def _run_experiment(
     mean_neg_ctrl = mean_controls(plate, layout, neg_control_id)
     results = collect_plate_results(layout, plate)
 
-    n_res = len(results)
-    n_rows = len(plate_content)
-
-    if n_res == n_rows:
-        # Layout encodes all wells (including replicates) directly.
-        plate_content["results"] = results
-    elif n_rows % n_res == 0:
-        # Layout encodes one replicate per compound×dose; plate_content has
-        # multiple replicates. Repeat the per-well results across replicates.
-        repeat = n_rows // n_res
-        plate_content["results"] = np.tile(results, repeat)
-    else:
+    if len(results) != len(plate_content):
         raise ValueError(
-            f"results length {n_res} does not match plate_content length {n_rows}; "
-            "layout encoding and plate_content ordering must agree."
+            f"Collected {len(results)} observations for "
+            f"{len(plate_content)} plate-content rows "
+            f"in layout {layout_file!r}. "
+            "Each experimental well must have a unique identifier "
+            "after any required layout conversion. "
+            "Check the layout encoding and requires_layout_update."
         )
+
+    plate_content["results"] = results
 
     return plate_content, mean_neg_ctrl
 

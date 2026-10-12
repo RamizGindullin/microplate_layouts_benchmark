@@ -42,6 +42,8 @@ from benchmark_common import (
     dilution_for,
     fig_dir_str,
     validate_layout_registry_consistency,
+    dr_curve_stem,
+    dr_curve_png_name
 )
 from benchmark_disturbances import (
     DISTURBANCES,
@@ -52,6 +54,13 @@ from benchmark_disturbances import (
     _disturbance_function_for_dr_id
 )
 import libraries.disturbances as _dt_for_registry
+
+
+CURVE_FIGURE_SCENARIO_KEY = "right-half-s0.4"
+CURVE_FIGURE_COMPOUND = 1
+CURVE_FIGURE_TEX_NAME = "dose_response_illustrative_curves.tex"
+CURVE_FIGURE_COMPOUNDS = None       # All compounds, default
+# CURVE_FIGURE_COMPOUNDS = [0, 1, 2]  # Explicit subset
 
 # ── Caption templates (verbatim style from existing thin wrappers) ─────────
 _DR_CAPTION_PLACEHOLDER = "DISTURBANCE_DESC"
@@ -431,97 +440,250 @@ def generate_dose_response_figures(cfg: DoseResponseConfig) -> None:
 # Stage 3: Curves
 # -----------------------------------------------------------------------
 
+def _write_curve_example_metadata(
+    cfg: DoseResponseConfig,
+    *,
+    params,
+    df_params,
+    curve_records,
+    error_type,
+    scenario_key,
+    compounds,
+    concentrations,
+    replicates,
+    dilution,
+    expected_noise,
+    min_dist,
+) -> None:
+    """Write fit metadata consumed by the tables-stage curve wrapper."""
+    import json
+
+    metadata_path = (
+        cfg.paper_figures_dir
+        / "dose_response_curve_examples.json"
+    )
+
+    records = []
+
+    for record in curve_records:
+        fit_table = record["fit_table"]
+
+        for compound, row in fit_table.iterrows():
+            true = df_params.loc[compound]
+
+            obtained_abs_ic50 = dr.IC50(
+                row["b"],
+                row["c"],
+                row["d"],
+                row["e"],
+            )
+
+            records.append(
+                {
+                    "layout_key": record["layout_key"],
+                    "display_type": record["display_type"],
+                    "layout_file": record["layout_file"],
+                    "curve_figure_stem": (
+                        record["curve_figure_stem"]
+                    ),
+                    "compound": int(compound),
+                    "lost_rows": record["lost_rows"],
+                    "true_b": float(true["b"]),
+                    "true_c": float(true["c"]),
+                    "true_d": float(true["d"]),
+                    "true_relative_ic50": float(true["e"]),
+                    "true_absolute_ic50": float(
+                        true["abs IC50"]
+                    ),
+                    "fit_b": float(row["b"]),
+                    "fit_c": float(row["c"]),
+                    "fit_d": float(row["d"]),
+                    "fit_relative_ic50": float(row["e"]),
+                    "fit_absolute_ic50": (
+                        None
+                        if not np.isfinite(obtained_abs_ic50)
+                        else float(obtained_abs_ic50)
+                    ),
+                    "r2_score": (
+                        None
+                        if not np.isfinite(row["r2_score"])
+                        else float(row["r2_score"])
+                    ),
+                }
+            )
+
+    metadata = {
+        "scenario_key": scenario_key,
+        "disturbance_type": error_type["type"],
+        "disturbance_strength": error_type["error"],
+        "negative_controls_affected": (
+            error_type["neg_controls_affected"]
+        ),
+        "plate_rows": 16,
+        "plate_columns": 24,
+        "negative_controls": 20,
+        "compounds": compounds,
+        "concentrations": concentrations,
+        "replicates": replicates,
+        "dilution": dilution,
+        "start_dose": 10000.0,
+        "measurement_noise_amplitude": expected_noise,
+        "min_dist": min_dist,
+        "records": records,
+    }
+
+    metadata_path.write_text(
+        json.dumps(metadata, indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+
+    print("Written:", metadata_path)
+
+
 def generate_example_curves(cfg: DoseResponseConfig) -> None:
-    """
-    Regenerates example per-compound curve PNGs for each layout type.
+    """Generate matched illustrative DR curve panels for all layout families.
 
-    The curves notebook overwrites (compounds, concentrations, replicates) from the
-    layout filename for COMPD/PLAID entries, producing different plate_content per
-    layout type. This function mirrors that logic explicitly.
-
-    Output PNGs land in cfg.paper_figures_dir (i.e. figures/).
-    The os.chdir() approach from the original script is replaced by passing an
-    explicit output_dir to dr.plate_curves_after_error.
+    All panels use the same simulated compounds, dose-response parameters,
+    plate content, disturbance, and normalization procedure. Layout geometry
+    is therefore the only layout-dependent input.
     """
     np.random.seed(42)
-    
+
     cfg.paper_figures_dir.mkdir(parents=True, exist_ok=True)
 
-    slopes = [0.5, 1, 1.5, 2]
-    current_e = 50
-    expected_noise = 0.01
-    my_min_dist = 0
+    compounds = 12
+    concentrations = 8
+    replicates = 3
+    dilution = dilution_for(concentrations)
 
-    # Right-half disturbance, strength 0.4 (paper scenario)
-    error_nl = 0.4
+    slopes = [0.5, 1.0, 1.5]
+    current_e = 50.0
+    expected_noise = 0.01
+    min_dist = 0
+
     error_type = {
         "type": "right-half",
         "error_function": dt.add_errors_to_right_columns_half,
-        "error": error_nl,
+        "error": 0.4,
+        "neg_controls_affected": True,
     }
-    limits = [{"from": 15, "to": 16}]  # bottom row, as in the curves notebook
 
-    for layout_type, layout_dir, layout_file, compounds, concentrations, replicates in dose_response_curve_examples():
-        print("layouts:", layout_type)
-        try:
-            dilution = dilution_for(concentrations)
-        except ValueError:
-            dilution = 8  # fallback retained from original script
-        
-        normalization_function = next(
-            spec._resolved_error_correction()
-            for spec in DOSE_RESPONSE_LAYOUT_SPECS
-            if spec.display_type == layout_type
+    scenario_key = CURVE_FIGURE_SCENARIO_KEY
+    limits = [{"from": 15, "to": 16}]
+
+    params = [
+        {
+            "compound": compound,
+            "b": slopes[compound % len(slopes)],
+            "c": 0.0,
+            "d": 100.0,
+            "e": current_e + 5.0 * np.random.random(),
+            "startDose": 10000.0,
+            "nDose": concentrations,
+            "dilution": dilution,
+        }
+        for compound in range(compounds)
+    ]
+
+    df_params = pd.DataFrame.from_dict(params).set_index("compound")
+    df_params["abs IC50"] = dr.IC50(
+        df_params["b"],
+        df_params["c"],
+        df_params["d"],
+        df_params["e"],
+    )
+
+    plate_content = dr.generate_plate_content(
+        dose_response_params=params,
+        replicates=replicates,
+    )
+
+    selected_specs = [
+        spec
+        for spec in sorted(
+            DOSE_RESPONSE_LAYOUT_SPECS,
+            key=lambda spec: spec.plot_order,
         )
-        
-        params = [
-            {
-                "compound": i,
-                "b": slopes[i % 3],
-                "c": 0,
-                "d": 100,
-                "e": current_e + 5 * np.random.random(),
-                "startDose": 10000,
-                "nDose": concentrations,
-                "dilution": dilution,
-            }
-            for i in range(compounds)
-        ]
-        df_params = pd.DataFrame.from_dict(params).set_index("compound")
-        df_params["abs IC50"] = dr.IC50(
-            df_params["b"], df_params["c"], df_params["d"], df_params["e"]
+        if spec.curve_example_file is not None
+    ]
+
+    curve_records = []
+
+    for layout_spec in selected_specs:
+        layout_type = layout_spec.display_type
+        layout_dir = layout_spec.layout_dir
+        layout_file = layout_spec.curve_example_file
+
+        print("Generating illustrative curves:", layout_type)
+
+        normalization_function = (
+            layout_spec._resolved_error_correction()
         )
-        plate_content = dr.generate_plate_content(
-            dose_response_params=params, replicates=replicates
+
+        figure_stem = dr_curve_stem(
+            layout_spec.key,
+            layout_file,
+            scenario_key,
         )
 
         plate_type_dict = {
             "type": layout_type,
             "dir": layout_dir,
             "error_correction": normalization_function,
-            "requires_layout_update": False,
+            "requires_layout_update": (
+                layout_spec.requires_layout_update
+            ),
         }
 
         for limit in limits:
-            dr.plate_curves_after_error(
+            fit_table = dr.plate_curves_after_error(
                 layout_dir,
                 layout_file,
-                plate_content,
+                plate_content.copy(),
                 expected_noise,
                 error_type["error_function"],
                 error_type["error"],
                 normalization_function,
-                my_min_dist,
+                min_dist,
                 lose_from_row=limit["from"],
                 lose_to_row=limit["to"],
+                neg_controls_affected=(
+                    error_type["neg_controls_affected"]
+                ),
                 df_params=df_params,
                 plate_type=plate_type_dict,
                 compounds=compounds,
                 concentrations=concentrations,
                 replicates=replicates,
+                curve_figure_stem=figure_stem,
                 output_dir=str(cfg.paper_figures_dir),
             )
 
+            curve_records.append(
+                {
+                    "layout_key": layout_spec.key,
+                    "display_type": layout_spec.display_type,
+                    "layout_file": layout_file,
+                    "curve_figure_stem": figure_stem,
+                    "lost_rows": limit["to"] - limit["from"],
+                    "fit_table": fit_table,
+                }
+            )
+
+    _write_curve_example_metadata(
+        cfg,
+        params=params,
+        df_params=df_params,
+        curve_records=curve_records,
+        error_type=error_type,
+        scenario_key=scenario_key,
+        compounds=compounds,
+        concentrations=concentrations,
+        replicates=replicates,
+        dilution=dilution,
+        expected_noise=expected_noise,
+        min_dist=min_dist,
+    )
 
 # -----------------------------------------------------------------------
 # Stage 4: Tables
@@ -980,6 +1142,284 @@ def generate_dr_overview_tables(cfg: "DoseResponseConfig") -> None:
             )
 
 
+def generate_curve_figure_tex(cfg, metadata_path=None):
+    """Write compound-wise curve comparisons from existing JSON metadata and PNGs.
+
+    Replace the existing writer with this function. The tables-stage call and
+    dr_section_auto.tex inclusion remain unchanged. No simulation or fitting
+    functions are called.
+    """
+    import json
+    import math
+    import re
+    from pathlib import Path
+    from benchmark_common import DOSE_RESPONSE_LAYOUT_SPECS, dr_curve_png_name
+
+    def require(condition, message):
+        if not condition:
+            raise ValueError(message)
+
+    def finite(value):
+        try:
+            number = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        return number if math.isfinite(number) else None
+
+    def number(value, digits=2):
+        value = finite(value)
+        return rf"{value:.{digits}f}" if value is not None else r"\mathrm{undefined}"
+
+    def short(value):
+        value = finite(value)
+        return f"{value:g}" if value is not None else 'unspecified'
+
+    def tex(value):
+        replacements = {
+            '\\': r'\textbackslash{}', '&': r'\&', '%': r'\%',
+            '$': r'\$', '#': r'\#', '_': r'\_', '{': r'\{',
+            '}': r'\}', '~': r'\textasciitilde{}', '^': r'\textasciicircum{}',
+        }
+        return ''.join(replacements.get(character, character) for character in str(value))
+
+    def slug(value):
+        return re.sub(r'[^a-z0-9]+', '-', str(value).lower()).strip('-')
+
+    header_fields = {
+        'scenario_key', 'records', 'compounds', 'concentrations', 'replicates',
+        'plate_rows', 'plate_columns', 'negative_controls',
+        'disturbance_type', 'disturbance_strength',
+    }
+    record_fields = {
+        'layout_key', 'display_type', 'curve_figure_stem', 'compound',
+        'true_relative_ic50', 'true_absolute_ic50',
+        'fit_relative_ic50', 'fit_absolute_ic50', 'r2_score',
+    }
+
+    def is_curve_metadata(value):
+        return (
+            isinstance(value, dict) and header_fields.issubset(value)
+            and isinstance(value['records'], list) and bool(value['records'])
+            and isinstance(value['records'][0], dict)
+            and record_fields.issubset(value['records'][0])
+        )
+
+    def load_metadata(path):
+        with path.open(encoding='utf-8-sig') as handle:
+            value = json.load(handle)
+        require(is_curve_metadata(value), f'Not a curve metadata file: {path}')
+        return value
+
+    figure_dir = Path(cfg.paper_figures_dir).resolve()
+    if metadata_path is not None:
+        source_path = Path(metadata_path).resolve()
+        metadata = load_metadata(source_path)
+    else:
+        # Search existing output locations; do not guess a metadata filename.
+        roots = {figure_dir, figure_dir.parent}
+        if hasattr(cfg, 'data_dir'):
+            data_dir = Path(cfg.data_dir).resolve()
+            roots.update((data_dir, data_dir.parent))
+        candidates = set(Path.cwd().glob('*.json'))
+        for root in roots:
+            if root.is_dir():
+                candidates.update(root.rglob('*.json'))
+        matches = []
+        parse_errors = []
+        for path in sorted({path.resolve() for path in candidates}):
+            try:
+                with path.open(encoding='utf-8-sig') as handle:
+                    value = json.load(handle)
+            except (OSError, ValueError) as exc:
+                parse_errors.append(f'{path}: {exc}')
+                continue
+            if is_curve_metadata(value):
+                matches.append((path, value))
+        require(bool(matches),
+                'No curve-metadata JSON found in the configured output locations. '
+                'Run --stage curves first, or pass its existing JSON path explicitly '
+                'as generate_curve_figure_tex(cfg, metadata_path=...). '
+                + ('JSON parse errors: ' + '; '.join(parse_errors[:3]) if parse_errors else ''))
+        require(len(matches) == 1,
+                'Multiple curve-metadata JSON files match; refusing to choose a stale '
+                'or different experiment. Pass the intended existing path explicitly: '
+                + ', '.join(str(path) for path, _ in matches))
+        source_path, metadata = matches[0]
+
+    records = metadata['records']
+    by_panel = {}
+    for record in records:
+        require(isinstance(record, dict) and record_fields.issubset(record),
+                'A curve record is missing required identity or statistics fields.')
+        compound = int(record['compound'])
+        require(compound == record['compound'] and compound >= 0,
+                f'Invalid compound index: {record["compound"]!r}')
+        identity = (str(record['layout_key']), compound)
+        require(identity not in by_panel,
+                f'Duplicate layout/compound record {identity}; do not mix row-loss '
+                'variants or multiple experiments in one metadata file.')
+        by_panel[identity] = record
+
+    specs = sorted(
+        (spec for spec in DOSE_RESPONSE_LAYOUT_SPECS
+         if spec.curve_example_file is not None),
+        key=lambda spec: spec.plot_order,
+    )
+    require(bool(specs), 'No illustrative layout families are configured.')
+    layout_keys = [str(spec.key) for spec in specs]
+    require(len(layout_keys) == len(set(layout_keys)), 'Duplicate registry layout keys.')
+    available_keys = {key for key, _ in by_panel}
+    require(set(layout_keys).issubset(available_keys),
+            'Curve metadata is missing configured layout families: '
+            + ', '.join(sorted(set(layout_keys) - available_keys)))
+
+    count = int(metadata['compounds'])
+    require(count > 0, 'Metadata compounds must be positive.')
+    require(all(compound < count for _, compound in by_panel),
+            'A compound index exceeds the metadata compound count.')
+    selection = globals().get('CURVE_FIGURE_COMPOUNDS', None)
+    compounds = list(range(count)) if selection is None else list(selection)
+    require(bool(compounds), 'No compounds selected for the curve report.')
+    require(all(isinstance(compound, int) and not isinstance(compound, bool)
+                and 0 <= compound < count for compound in compounds),
+            'CURVE_FIGURE_COMPOUNDS must be None or a list of valid integer indices.')
+    require(len(compounds) == len(set(compounds)), 'Duplicate selected compound indices.')
+    missing_records = [(key, compound) for compound in compounds for key in layout_keys
+                       if (key, compound) not in by_panel]
+    require(not missing_records,
+            f'Missing curve records for selected panels: {missing_records}. '
+            'The producer must retain records for unavailable fits too.')
+
+    base = (
+        f'Illustrative dose-response curves for synthetic compound index {{compound}} '
+        f'on {int(metadata["plate_rows"])}' + r'$\times$'
+        + f'{int(metadata["plate_columns"])}-well plates containing '
+        f'{count} compounds, {int(metadata["concentrations"])} concentrations per compound, '
+        f'{int(metadata["replicates"])} technical replicates per concentration, and '
+        f'{int(metadata["negative_controls"])} physical negative-control wells. '
+        f'Disturbance: {tex(metadata["disturbance_type"])} '
+        f'(strength parameter $s={short(metadata["disturbance_strength"])}$). '
+    )
+    if 'negative_controls_affected' in metadata:
+        base += ('Negative controls are subject to disturbance application. '
+                 if metadata['negative_controls_affected']
+                 else 'Pre-disturbance negative-control signals are retained before normalization. ')
+    if 'start_dose' in metadata:
+        base += f'Starting concentration: {short(metadata["start_dose"])}'
+        if metadata.get('dose_unit'):
+            base += ' ' + tex(metadata['dose_unit'])
+        base += '. '
+    if 'dilution' in metadata:
+        base += f'Dilution factor: {short(metadata["dilution"])}. '
+    if 'measurement_noise_amplitude' in metadata:
+        base += ('Configured measurement-noise parameter: '
+                 f'{short(metadata["measurement_noise_amplitude"])}. ')
+    normalization = metadata.get('normalization_name', metadata.get('normalization'))
+    if normalization:
+        base += 'Normalization: ' + tex(normalization) + '. '
+    if 'control_pseudo_observations' in metadata:
+        base += f'The fit includes {int(metadata["control_pseudo_observations"])} control pseudo-observations'
+        if 'controls_per_pseudo_observation' in metadata:
+            base += f', each averaging {int(metadata["controls_per_pseudo_observation"])} normalized controls'
+        base += '. '
+
+    lines = [
+        '% AUTO-GENERATED by run_dose_response_benchmark.py --stage tables.',
+        '% Statistics and experiment settings are read from existing curve metadata.',
+        '% This writer does not simulate plates, refit curves, or regenerate PNGs.',
+        '',
+    ]
+    scenario_label = slug(metadata['scenario_key'])
+    used_files = set()
+    warning_count = 0
+    for figure_index, compound in enumerate(compounds):
+        panel_records = [by_panel[(key, compound)] for key in layout_keys]
+        lines += [r'\begin{figure*}[!htbp]', r'  \centering']
+        for panel_index, (key, record) in enumerate(zip(layout_keys, panel_records)):
+            filename = dr_curve_png_name(record['curve_figure_stem'], compound)
+            require(filename not in used_files, f'Curve PNG filename collision: {filename}')
+            used_files.add(filename)
+            path = figure_dir / filename
+            lines += [r'  \begin{subfigure}[t]{0.48\textwidth}', r'    \centering']
+            if path.is_file():
+                lines.append(rf'    \includegraphics[width=\linewidth]{{figures/{filename}}}')
+            else:
+                fit_fields = ('fit_b', 'fit_c', 'fit_d', 'fit_relative_ic50')
+                fit_unavailable = (all(field in record for field in fit_fields)
+                                   and any(finite(record[field]) is None for field in fit_fields))
+                if not fit_unavailable:
+                    raise FileNotFoundError(
+                        f'Metadata contains fitted results but the corresponding PNG '
+                        f'is missing: {path}. Regenerate --stage curves; no benchmark '
+                        'simulation is invoked by this writer.')
+                warning_count += 1
+                print(f'WARNING: no available fitted curve for {key}, compound {compound}')
+                lines += [
+                    r'    \fbox{\parbox[c][35mm][c]{0.9\linewidth}{\centering Curve unavailable}}',
+                    f'    % MISSING FITTED CURVE: {filename}',
+                ]
+
+            true_relative = finite(record['true_relative_ic50'])
+            true_absolute = finite(record['true_absolute_ic50'])
+            if (true_relative is not None and true_absolute is not None
+                    and math.isclose(true_relative, true_absolute, rel_tol=1e-12, abs_tol=1e-12)):
+                truth = rf'$\mathrm{{IC}}_{{50,\mathrm{{true}}}}={number(true_relative)}$'
+            else:
+                truth = (rf'$\mathrm{{IC}}_{{50,\mathrm{{rel,true}}}}={number(true_relative)}$, '
+                         rf'$\mathrm{{IC}}_{{50,\mathrm{{abs,true}}}}={number(true_absolute)}$')
+            caption = (
+                tex(record['display_type']) + ': '
+                + rf'$R^2={number(record["r2_score"], 4)}$. '
+                + truth + '. '
+                + rf'$\widehat{{\mathrm{{IC}}}}_{{50,\mathrm{{rel}}}}={number(record["fit_relative_ic50"])}$, '
+                + rf'$\widehat{{\mathrm{{IC}}}}_{{50,\mathrm{{abs}}}}={number(record["fit_absolute_ic50"])}$.'
+            )
+            lines += [rf'    \caption{{{caption}}}',
+                      rf'    \label{{fig:dr-curve-{scenario_label}-compound-{compound}-{slug(key)}}}',
+                      r'  \end{subfigure}']
+            if panel_index + 1 < len(panel_records):
+                lines.append(r'  \hfill' if panel_index % 2 == 0 else r'  \par\medskip')
+
+        experiment_caption = base.replace('{compound}', str(compound))
+        losses = {record.get('lost_rows') for record in panel_records}
+        if len(losses) == 1 and None not in losses:
+            experiment_caption += f'Row-loss setting: {short(next(iter(losses)))} array row(s). '
+        if 'lost_active_rows' in metadata:
+            experiment_caption += f'Active rows removed: {int(metadata["lost_active_rows"])}. '
+        experiment_caption += (
+            'Panels show the simulated observations, original and fitted LL.4 curves, '
+            'and control pseudo-observations. Panel captions report fitted $R^2$ and '
+            'true and estimated relative/absolute potency; undefined values are marked explicitly. '
+        )
+        truth_fields = ('true_b', 'true_c', 'true_d', 'true_relative_ic50', 'true_absolute_ic50')
+        truth_vectors = [[finite(record.get(field)) for field in truth_fields]
+                         for record in panel_records]
+        if all(all(value is not None for value in vector) for vector in truth_vectors):
+            shared_truth = all(all(math.isclose(value, reference, rel_tol=1e-12, abs_tol=1e-12)
+                                  for value, reference in zip(vector, truth_vectors[0]))
+                               for vector in truth_vectors[1:])
+            experiment_caption += (
+                'The panels share the same ground-truth curve parameters. '
+                if shared_truth else
+                'The panels have different ground-truth curve parameters; true potency '
+                'is therefore reported individually rather than as one figure-wide value. '
+            )
+        lines += [rf'  \caption{{{experiment_caption}}}',
+                  rf'  \label{{fig:dr-curves-{scenario_label}-compound-{compound}}}']
+        if figure_index == 0:
+            lines.append(r'  \label{fig:dose-response-illustrative-curves}')
+        lines += [r'\end{figure*}', '', r'\clearpage', '']
+
+    tex_name = globals().get('CURVE_FIGURE_TEX_NAME', 'dose_response_illustrative_curves.tex')
+    output_path = figure_dir.parent / 'tikz-figures' / tex_name
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text('\n'.join(lines), encoding='utf-8')
+    print('Curve metadata:', source_path)
+    print(f'Written: {output_path} ({len(compounds)} figures, '
+          f'{len(used_files)} panels, {warning_count} unavailable fitted curves)')
+    return output_path
+
+
 def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
     """Write tikz-figures/dr_section_auto.tex.
 
@@ -1146,6 +1586,21 @@ def generate_dr_section_tex(cfg: "DoseResponseConfig") -> None:
                 fig_root=fig_root, filenames_by_row=rows,
                 col_labels=col_labels, caption=cap,
             )
+    
+    curve_tex_stem = Path(CURVE_FIGURE_TEX_NAME).stem
+
+    lines.extend(
+        [
+            "",
+            r"\clearpage",
+            r"\subsection{Illustrative dose-response curves}",
+            "",
+            rf"\input{{tikz-figures/{curve_tex_stem}}}",
+            "",
+            r"\clearpage",
+            "",
+        ]
+    )
 
     out_path.write_text("\n".join(lines) + "\n")
     print(f"  Written: {out_path}")
@@ -1184,6 +1639,7 @@ def main() -> None:
         generate_ic50_latex_tables(cfg)
         generate_dr_full_latex_tables(cfg)
         generate_dr_overview_tables(cfg)
+        generate_curve_figure_tex(cfg)
         generate_dr_section_tex(cfg)
 
 

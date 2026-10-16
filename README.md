@@ -444,8 +444,8 @@ The default configuration compares four layout families in both pipelines:
 |---|---|---|---:|
 | `random` | `Random` | Randomized baseline | `False` |
 | `plaid` | `PLAID` | PLAID comparison layouts | `False` |
-| `compd` | `COMPD` | Legacy COMPD 1.00 layouts | `True` |
-| `compd134` | `COMPD134` | Updated COMPD layouts in per-well form | `False` |
+| `compd` | `COMPD` | COMPD 1.00 layouts | `True` |
+| `compd134` | `COMPD134` | Updated COMPD layouts in the same COMPD format | `True` |
 
 The conversion flag concerns dose-response encoding. All four families explicitly select two-dimensional LOESS normalization in both pipelines.
 
